@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Workout Dashboard</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <style>
+        :root {
+            --primary: #2563eb;
+            --primary-dark: #1d4ed8;
+            --bg-color: #f8fafc;
+            --card-bg: #ffffff;
+            --text: #1e293b;
+            --accent: #10b981;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text);
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1 { text-align: center; margin-bottom: 30px; }
+        
+        /* Grid Layout voor controls */
+        .controls-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        @media(min-width: 768px) {
+            .controls-grid { grid-template-columns: 1fr 1fr; }
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-bottom: 15px;
+        }
+        .control-group:last-child { margin-bottom: 0; }
+        
+        .profile-row {
+            display: flex;
+            gap: 10px;
+        }
+        .profile-row > div { flex: 1; }
+
+        input, select {
+            padding: 10px;
+            border: 1px solid #cbd5e1;
+            border-radius: 5px;
+            font-size: 14px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 5px;
+            flex-wrap: wrap;
+        }
+        .period-btn {
+            background-color: #e2e8f0;
+            color: var(--text);
+            border: none;
+            padding: 8px 12px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.2s;
+            flex: 1;
+            text-align: center;
+        }
+        .period-btn:hover { background-color: #cbd5e1; }
+        .period-btn.active { background-color: var(--primary); color: white; }
+
+        /* Benchmark Sectie */
+        #benchmarkSection {
+            display: none; /* Verborgen tot upload */
+            background: linear-gradient(135deg, #1e293b, #0f172a);
+            color: white;
+            text-align: center;
+            border-left: 5px solid var(--accent);
+        }
+        .benchmark-stats {
+            display: flex;
+            justify-content: space-around;
+            flex-wrap: wrap;
+            margin-top: 15px;
+            gap: 10px;
+        }
+        .stat-box {
+            background: rgba(255,255,255,0.1);
+            padding: 15px;
+            border-radius: 8px;
+            min-width: 120px;
+        }
+        .stat-value { font-size: 24px; font-weight: bold; margin-bottom: 5px; color: var(--accent); }
+        .stat-label { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; opacity: 0.8; }
+
+        .charts-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 20px;
+            margin-top: 20px;
+        }
+        @media(min-width: 768px) {
+            .charts-grid { grid-template-columns: 1fr 1fr; }
+        }
+        .chart-container {
+            background-color: var(--card-bg);
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            position: relative;
+            height: 400px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>🏋️‍♂️ Persoonlijk Workout Dashboard</h1>
+    
+    <div class="controls-grid">
+        <div class="card">
+            <h3>1. Data & Profiel</h3>
+            <div class="control-group">
+                <label for="csvFileInput"><b>Upload je workout data (CSV)</b></label>
+                <input type="file" id="csvFileInput" accept=".csv" />
+            </div>
+            
+            <div class="profile-row">
+                <div class="control-group">
+                    <label><b>Geslacht</b></label>
+                    <select id="userGender">
+                        <option value="male">Man</option>
+                        <option value="female">Vrouw</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label><b>Leeftijd</b></label>
+                    <input type="number" id="userAge" value="25" min="10" max="100" />
+                </div>
+                <div class="control-group">
+                    <label><b>Gewicht (kg)</b></label>
+                    <input type="number" id="userWeight" value="80" step="0.1" />
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>2. Grafiek Filters</h3>
+            <div class="control-group">
+                <label><b>Selecteer Periode</b></label>
+                <div class="button-group">
+                    <button class="period-btn" data-period="1m">1 Maand</button>
+                    <button class="period-btn" data-period="6m">6 Maanden</button>
+                    <button class="period-btn" data-period="1y">1 Jaar</button>
+                    <button class="period-btn active" data-period="all">All Time</button>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label for="exerciseInput"><b>Zoek & Selecteer een Oefening</b></label>
+                <input list="exerciseList" id="exerciseInput" placeholder="Typ om te zoeken..." />
+                <datalist id="exerciseList"></datalist>
+            </div>
+        </div>
+    </div>
+
+    <div class="card" id="benchmarkSection">
+        <h2 style="margin-top: 0;">🏆 Bench Press Benchmark</h2>
+        <p style="margin: 0; opacity: 0.8;">Gebaseerd op je all-time hoogste berekende 1RM vs. krachtstandaarden voor jouw profiel.</p>
+        <div class="benchmark-stats">
+            <div class="stat-box">
+                <div class="stat-value" id="bm1RM">0 kg</div>
+                <div class="stat-label">Jouw 1RM</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-value" id="bmClass">-</div>
+                <div class="stat-label">Niveau Klasse</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-value" id="bmPercentage">0%</div>
+                <div class="stat-label">Vs. Gemiddelde</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="charts-grid">
+        <div class="chart-container">
+            <canvas id="progressionChart"></canvas>
+        </div>
+        <div class="chart-container">
+            <canvas id="durationChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<script>
+    let rawData = [];
+    let progressionChartInst = null;
+    let durationChartInst = null;
+    
+    let globalMinDate = new Date();
+    let globalMaxDate = new Date(1970, 0, 1);
+    let currentPeriod = 'all';
+    let maxBench1RM = 0;
+
+    // Elementen
+    const fileInput = document.getElementById('csvFileInput');
+    const exerciseInput = document.getElementById('exerciseInput');
+    const exerciseList = document.getElementById('exerciseList');
+    const periodButtons = document.querySelectorAll('.period-btn');
+    
+    const userGender = document.getElementById('userGender');
+    const userAge = document.getElementById('userAge');
+    const userWeight = document.getElementById('userWeight');
+
+    // 1. Luister naar bestandsupload
+    fileInput.addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        Papa.parse(file, {
+            header: true,
+            dynamicTyping: true,
+            skipEmptyLines: true,
+            complete: function(results) {
+                rawData = results.data;
+                processInitialData();
+            }
+        });
+    });
+
+    // 2. Event listeners voor filters & profiel
+    exerciseInput.addEventListener('change', updateDashboard);
+    userGender.addEventListener('change', updateBenchmarkUI);
+    userAge.addEventListener('input', updateBenchmarkUI);
+    userWeight.addEventListener('input', updateBenchmarkUI);
+    
+    periodButtons.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            periodButtons.forEach(b => b.classList.remove('active'));
+            e.target.classList.add('active');
+            currentPeriod = e.target.getAttribute('data-period');
+            updateDashboard();
+        });
+    });
+
+    function processInitialData() {
+        const exercises = new Set();
+        globalMinDate = new Date();
+        globalMaxDate = new Date(1970, 0, 1);
+        maxBench1RM = 0; // Reset bench 1rm
+
+        rawData.forEach(row => {
+            if (row.exercise_title) exercises.add(row.exercise_title);
+            
+            if (row.start_time) {
+                const date = new Date(row.start_time);
+                if (date < globalMinDate) globalMinDate = date;
+                if (date > globalMaxDate) globalMaxDate = date;
+            }
+
+            // Zoek specifiek naar Bench Press voor de benchmark (all-time)
+            if (row.exercise_title && row.exercise_title.toLowerCase().includes('bench press')) {
+                const weight = parseFloat(row.weight_kg) || 0;
+                const reps = parseInt(row.reps) || 0;
+                const estimated1RM = reps > 1 ? weight * (1 + (reps / 30)) : weight;
+                if (estimated1RM > maxBench1RM) maxBench1RM = estimated1RM;
+            }
+        });
+
+        // Vul de datalist (zoekveld)
+        exerciseList.innerHTML = '';
+        Array.from(exercises).sort().forEach(ex => {
+            const option = document.createElement('option');
+            option.value = ex;
+            exerciseList.appendChild(option);
+        });
+
+        // Kies een standaard oefening als die bestaat (en vul hem in het textveld)
+        if(exercises.has("Squat (Barbell)")) {
+            exerciseInput.value = "Squat (Barbell)";
+        } else if (exercises.has("Bench Press (Dumbbell)")) {
+            exerciseInput.value = "Bench Press (Dumbbell)";
+        }
+
+        // Toon de benchmark kaart
+        document.getElementById('benchmarkSection').style.display = 'block';
+        updateBenchmarkUI();
+        updateDashboard();
+    }
+
+    function updateBenchmarkUI() {
+        if (maxBench1RM === 0) {
+            document.getElementById('bm1RM').textContent = "-";
+            document.getElementById('bmClass').textContent = "Geen Data";
+            document.getElementById('bmPercentage').textContent = "-";
+            return;
+        }
+
+        const age = parseInt(userAge.value) || 25;
+        const weight = parseFloat(userWeight.value) || 80;
+        const gender = userGender.value;
+
+        // Leeftijdscorrectie (kracht neemt licht af op latere leeftijd)
+        let ageFactor = 1.0;
+        if (age >= 40 && age < 50) ageFactor = 0.9;
+        if (age >= 50 && age < 60) ageFactor = 0.8;
+        if (age >= 60) ageFactor = 0.7;
+
+        // Krachtstandaarden multipliers (1RM gedeeld door lichaamsgewicht)
+        // Dit zijn gangbare benaderingen gebaseerd op gemiddelde sporter data
+        const standards = gender === 'male' ? 
+            { beginner: 0.5, novice: 0.75, intermediate: 1.0, advanced: 1.3, elite: 1.6 } : 
+            { beginner: 0.3, novice: 0.45, intermediate: 0.6, advanced: 0.8, elite: 1.0 };
+
+        // Bereken de streefgewichten in KG voor deze specifieke persoon
+        const targetIntermediate = standards.intermediate * weight * ageFactor;
+        const targetNovice = standards.novice * weight * ageFactor;
+        const targetAdvanced = standards.advanced * weight * ageFactor;
+        const targetElite = standards.elite * weight * ageFactor;
+
+        // Bepaal de klasse
+        let userClass = "Beginner";
+        let color = "#cbd5e1"; // Grijs
+        if (maxBench1RM >= targetElite) { userClass = "Elite 👑"; color = "#f59e0b"; } // Goud
+        else if (maxBench1RM >= targetAdvanced) { userClass = "Excellent 🔥"; color = "#3b82f6"; } // Blauw
+        else if (maxBench1RM >= targetIntermediate) { userClass = "Gemiddeld 👍"; color = "#10b981"; } // Groen
+        else if (maxBench1RM >= targetNovice) { userClass = "Amateur 📈"; color = "#f97316"; } // Oranje
+
+        // Bereken percentage t.o.v. de 'Gemiddelde' (Intermediate) sporter
+        let pct = ((maxBench1RM / targetIntermediate) * 100) - 100;
+        let pctText = pct >= 0 ? `+${Math.round(pct)}% Sterker` : `${Math.round(pct)}% Zwakker`;
+        
+        // Update HTML
+        document.getElementById('bm1RM').textContent = Math.round(maxBench1RM) + " kg";
+        const classEl = document.getElementById('bmClass');
+        classEl.textContent = userClass;
+        classEl.style.color = color;
+        
+        const pctEl = document.getElementById('bmPercentage');
+        pctEl.textContent = pctText;
+        pctEl.style.color = pct >= 0 ? "#10b981" : "#ef4444";
+    }
+
+    function updateDashboard() {
+        if (!rawData.length) return;
+
+        const selectedExercise = exerciseInput.value;
+        if(!selectedExercise) return; // Doe niets als het veld leeg is
+
+        const endDate = new Date(globalMaxDate);
+        let startDate = new Date(globalMinDate);
+
+        if (currentPeriod === '1m') {
+            startDate = new Date(endDate);
+            startDate.setMonth(startDate.getMonth() - 1);
+        } else if (currentPeriod === '6m') {
+            startDate = new Date(endDate);
+            startDate.setMonth(startDate.getMonth() - 6);
+        } else if (currentPeriod === '1y') {
+            startDate = new Date(endDate);
+            startDate.setFullYear(startDate.getFullYear() - 1);
+        }
+
+        const filteredData = rawData.filter(row => {
+            if (!row.start_time) return false;
+            const date = new Date(row.start_time);
+            return date >= startDate && date <= endDate;
+        });
+
+        renderProgressionChart(filteredData, selectedExercise);
+        renderDurationChart(filteredData);
+    }
+
+    function renderProgressionChart(data, exerciseName) {
+        const exerciseData = data.filter(row => row.exercise_title === exerciseName && row.weight_kg > 0);
+        const dailyStats = {};
+
+        exerciseData.forEach(row => {
+            const dateStr = new Date(row.start_time).toISOString().split('T')[0];
+            const weight = parseFloat(row.weight_kg) || 0;
+            const reps = parseInt(row.reps) || 0;
+            const estimated1RM = reps > 1 ? weight * (1 + (reps / 30)) : weight;
+
+            if (!dailyStats[dateStr]) {
+                dailyStats[dateStr] = { maxWeight: 0, max1RM: 0 };
+            }
+            if (weight > dailyStats[dateStr].maxWeight) dailyStats[dateStr].maxWeight = weight;
+            if (estimated1RM > dailyStats[dateStr].max1RM) dailyStats[dateStr].max1RM = estimated1RM;
+        });
+
+        const labels = Object.keys(dailyStats).sort();
+        const maxWeights = labels.map(date => dailyStats[date].maxWeight);
+        const max1RMs = labels.map(date => Math.round(dailyStats[date].max1RM));
+
+        if (progressionChartInst) progressionChartInst.destroy();
+
+        const ctx = document.getElementById('progressionChart').getContext('2d');
+        progressionChartInst = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [
+                    { label: 'Max Gewicht (kg)', data: maxWeights, borderColor: '#2563eb', backgroundColor: 'rgba(37, 99, 235, 0.1)', tension: 0.3, fill: true },
+                    { label: 'Geschatte 1RM (kg)', data: max1RMs, borderColor: '#dc2626', borderDash: [5, 5], tension: 0.3, fill: false }
+                ]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: { title: { display: true, text: `Krachtprogressie: ${exerciseName}` } },
+                scales: { y: { beginAtZero: false } }
+            }
+        });
+    }
+
+    function renderDurationChart(data) {
+        const workouts = {};
+
+        data.forEach(row => {
+            if (!row.start_time || !row.end_time) return;
+            const dateStr = new Date(row.start_time).toISOString().split('T')[0];
+            const start = new Date(row.start_time);
+            const end = new Date(row.end_time);
+            const workoutKey = row.title + "_" + start.getTime();
+
+            if (!workouts[dateStr]) workouts[dateStr] = {};
+            workouts[dateStr][workoutKey] = (end - start) / (1000 * 60 * 60); 
+        });
+
+        const labels = Object.keys(workouts).sort();
+        const dailyHours = labels.map(date => {
+            let totalHours = 0;
+            for (let key in workouts[date]) { totalHours += workouts[date][key]; }
+            return totalHours.toFixed(2);
+        });
+
+        if (durationChartInst) durationChartInst.destroy();
+
+        const ctx = document.getElementById('durationChart').getContext('2d');
+        durationChartInst = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{ label: 'Trainingsduur (Uren)', data: dailyHours, backgroundColor: '#10b981', borderRadius: 4 }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: { title: { display: true, text: 'Tijd besteed in de sportschool (Uur per dag)' } },
+                scales: { y: { beginAtZero: true } }
+            }
+        });
+    }
+</script>
+
+</body>
+</html>
