@@ -16,7 +16,6 @@
             --accent: #10b981;
             --purple: #8b5cf6;
             --orange: #f59e0b;
-            --danger: #ef4444;
         }
         body {
             font-family: 'Inter', system-ui, sans-serif;
@@ -62,12 +61,6 @@
         }
         .period-btn.active { background: var(--primary); color: white; }
 
-        /* API UI Styles */
-        .api-status { padding: 8px 12px; border-radius: 6px; font-size: 13px; font-weight: 600; display: inline-block; margin-top: 10px; }
-        .status-offline { background: #fee2e2; color: var(--danger); }
-        .status-online { background: #dcfce7; color: var(--accent); }
-        .sync-btn { background: var(--primary); color: white; border: none; padding: 10px; border-radius: 6px; cursor: pointer; font-weight: 600; margin-top: 5px; }
-
         .chart-container { height: 320px; position: relative; width: 100%; }
 
         .bottom-grid { display: grid; grid-template-columns: 1fr; gap: 20px; margin-bottom: 20px;}
@@ -95,12 +88,7 @@
     <div class="grid-2">
         <div class="card" style="margin-bottom: 0;">
             <div class="control-group">
-                <label><b>1. Hevy API Sync</b></label>
-                <input type="password" id="hevyApiKey" placeholder="Plak Hevy API Key..." />
-                <button class="sync-btn" onclick="syncWithHevy()">Synchroniseer Alles</button>
-                <div id="apiStatus" class="api-status status-offline">Niet verbonden</div>
-                
-                <label style="margin-top: 15px;"><b>Of handmatige CSV</b></label>
+                <label><b>1. Data Upload (CSV)</b></label>
                 <input type="file" id="csvFileInput" accept=".csv" />
             </div>
             <div class="profile-row">
@@ -112,7 +100,7 @@
                     </select>
                 </div>
                 <div class="control-group">
-                    <label>Gewicht (kg)</label>
+                    <label>Lichaamsgewicht (kg)</label>
                     <input type="number" id="userWeight" value="80" />
                 </div>
             </div>
@@ -129,7 +117,7 @@
                 </div>
             </div>
             <div class="control-group" style="margin-top: 10px;">
-                <label>Zoek Oefening</label>
+                <label>Zoek Oefening (Toont statistieken & voorspelling)</label>
                 <input list="exerciseList" id="exerciseInput" placeholder="Bijv. Squat (Barbell)..." />
                 <datalist id="exerciseList"></datalist>
             </div>
@@ -166,21 +154,26 @@
         <div class="card" style="margin-bottom: 0;">
             <h3 style="margin-top: 0; color: var(--purple);">📈 Je Volgende Sessie</h3>
             <p style="font-size: 13px; color: #64748b; margin-top: -10px;">Aanbeveling gebaseerd op je laatste 6 weken.</p>
-            <div id="recContent">Wacht op data...</div>
+            <div id="recContent">Upload data en kies een oefening...</div>
         </div>
 
         <div class="card" style="margin-bottom: 0;">
-            <h3 style="margin-top: 0; color: var(--primary);">🎯 Rep-Doelen</h3>
+            <h3 style="margin-top: 0; color: var(--primary);">🎯 Rep-Doelen per Gewicht</h3>
+            <p style="font-size: 13px; color: #64748b; margin-top: -10px;">Gebaseerd op je actuele beste 1RM.</p>
             <table>
-                <thead><tr><th>Gewicht</th><th>Target Reps</th><th>Zone</th></tr></thead>
-                <tbody id="repTableBody"><tr><td colspan="3" style="text-align: center;">Geen data...</td></tr></tbody>
+                <thead>
+                    <tr><th>Gewicht</th><th>Target Reps</th><th>Trainingszone</th></tr>
+                </thead>
+                <tbody id="repTableBody">
+                    <tr><td colspan="3" style="text-align: center;">Upload data...</td></tr>
+                </tbody>
             </table>
         </div>
     </div>
 
     <div id="benchmarkSection">
         <h3 style="margin-top: 0;">🏆 Kracht Benchmark</h3>
-        <p style="margin: 0; font-size: 13px; opacity: 0.7;">Vergeleken met wereldwijde krachtstandaarden.</p>
+        <p style="margin: 0; font-size: 13px; opacity: 0.7;">Vergeleken met wereldwijde krachtstandaarden voor jouw profiel. (Berekent op je hoogste bench, squat of deadlift).</p>
         <div class="flex-around">
             <div class="stat-mini"><b id="bmExercise">-</b><span>Oefening</span></div>
             <div class="stat-mini"><b id="bm1RM">0 kg</b><span>Jouw 1RM</span></div>
@@ -192,7 +185,10 @@
 
 <script>
     let rawData = [];
-    let progressionChartInst, durationChartInst, volumeChartInst, dowChartInst;
+    let progressionChartInst = null;
+    let durationChartInst = null;
+    let volumeChartInst = null;
+    let dowChartInst = null;
     let globalMaxDate = new Date(1970, 0, 1);
     let currentPeriod = 'all';
     let bestBench = 0, bestSquat = 0, bestDeadlift = 0;
@@ -202,79 +198,10 @@
     const exerciseList = document.getElementById('exerciseList');
     const periodButtons = document.querySelectorAll('.period-btn');
 
-    // --- NIEUW: HEVY API SYNC (VOLLEDIGE GESCHIEDENIS) ---
-    async function syncWithHevy() {
-        const apiKey = document.getElementById('hevyApiKey').value;
-        const statusDiv = document.getElementById('apiStatus');
-        
-        if(!apiKey) { alert("Voer eerst een API key in."); return; }
-        
-        statusDiv.className = "api-status";
-        statusDiv.textContent = "Verbinden...";
-
-        let allWorkouts = [];
-        let page = 1;
-        let hasMore = true;
-
-        try {
-            while (hasMore) {
-                statusDiv.textContent = `Laden pagina ${page}...`;
-                const response = await fetch(`https://api.hevyapp.com/v1/workouts?page=${page}&pageSize=50`, {
-                    headers: { 'api-key': apiKey }
-                });
-
-                if (!response.ok) throw new Error("API Sleutel onjuist of limiet bereikt.");
-
-                const data = await response.json();
-                const workouts = data.workouts || [];
-                
-                if (workouts.length === 0) {
-                    hasMore = false;
-                } else {
-                    allWorkouts = allWorkouts.concat(workouts);
-                    page++;
-                    // Veiligheidsstop om oneindige loops te voorkomen
-                    if (page > 100) hasMore = false; 
-                }
-            }
-
-            if (allWorkouts.length === 0) throw new Error("Geen workouts gevonden.");
-
-            rawData = transformHevyData(allWorkouts);
-            statusDiv.textContent = `✅ ${allWorkouts.length} workouts gesynchroniseerd!`;
-            statusDiv.className = "api-status status-online";
-            
-            initDashboard();
-        } catch (err) {
-            statusDiv.textContent = "❌ Fout: " + err.message;
-            statusDiv.className = "api-status status-offline";
-        }
-    }
-
-    function transformHevyData(workouts) {
-        let flatData = [];
-        workouts.forEach(w => {
-            w.exercises.forEach(ex => {
-                ex.sets.forEach((set, index) => {
-                    flatData.push({
-                        title: w.title,
-                        start_time: w.start_time,
-                        end_time: w.end_time,
-                        exercise_title: ex.title,
-                        set_index: index,
-                        weight_kg: set.weight_kg,
-                        reps: set.reps,
-                        set_type: set.type
-                    });
-                });
-            });
-        });
-        return flatData;
-    }
-
-    // --- DASHBOARD LOGICA (GELIJK AAN BASIS) ---
     fileInput.addEventListener('change', e => {
-        Papa.parse(e.target.files[0], {
+        const file = e.target.files[0];
+        if (!file) return;
+        Papa.parse(file, {
             header: true, dynamicTyping: true, skipEmptyLines: true,
             complete: results => { rawData = results.data; initDashboard(); }
         });
@@ -298,7 +225,10 @@
         date.setHours(0, 0, 0, 0);
         date.setDate(date.getDate() + 3 - (date.getDay() + 6) % 7);
         const week1 = new Date(date.getFullYear(), 0, 4);
-        return { num: 1 + Math.round(((date.getTime() - week1.getTime()) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7), year: date.getFullYear(), timestamp: date.getTime() };
+        return { 
+            num: 1 + Math.round(((date.getTime() - week1.getTime()) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7), 
+            year: date.getFullYear(), timestamp: date.getTime() 
+        };
     }
 
     function initDashboard() {
@@ -316,6 +246,7 @@
             const w = row.weight_kg || 0;
             const r = row.reps || 0;
             const m = r > 1 ? w * (1 + (r / 30)) : w;
+
             if (exName.includes('bench press')) { if (m > bestBench) bestBench = m; }
             if (exName.includes('squat')) { if (m > bestSquat) bestSquat = m; }
             if (exName.includes('deadlift')) { if (m > bestDeadlift) bestDeadlift = m; }
@@ -342,10 +273,18 @@
         let activeMax = bestBench;
         let activeEx = "Bench Press";
         let standards = gender === 'male' ? { int: 1.0, adv: 1.3, elite: 1.6 } : { int: 0.6, adv: 0.8, elite: 1.0 };
-        if(bestDeadlift > bestBench * 1.5) { activeMax = bestDeadlift; activeEx = "Deadlift"; standards = gender === 'male' ? { int: 1.5, adv: 2.0, elite: 2.5 } : { int: 1.0, adv: 1.4, elite: 1.8 }; }
+
+        if(bestDeadlift > bestBench * 1.5) { 
+            activeMax = bestDeadlift; activeEx = "Deadlift"; 
+            standards = gender === 'male' ? { int: 1.5, adv: 2.0, elite: 2.5 } : { int: 1.0, adv: 1.4, elite: 1.8 };
+        }
+
         const ratio = activeMax / weight;
         let userClass = "Beginner";
-        if (ratio >= standards.elite) userClass = "Elite 🏆"; else if (ratio >= standards.adv) userClass = "Advanced 🔥"; else if (ratio >= standards.int) userClass = "Intermediate 👍";
+        if (ratio >= standards.elite) userClass = "Elite 🏆";
+        else if (ratio >= standards.adv) userClass = "Advanced 🔥";
+        else if (ratio >= standards.int) userClass = "Intermediate 👍";
+
         document.getElementById('bmExercise').textContent = activeEx;
         document.getElementById('bm1RM').textContent = Math.round(activeMax) + " kg";
         document.getElementById('bmClass').textContent = userClass;
@@ -355,66 +294,148 @@
     function updateDashboard() {
         const ex = exerciseInput.value;
         if (!rawData.length || !ex) return;
+        
         const endDate = new Date(globalMaxDate);
         let startDate = new Date(0);
         if (currentPeriod === '1m') startDate = new Date(endDate).setMonth(endDate.getMonth() - 1);
         else if (currentPeriod === '6m') startDate = new Date(endDate).setMonth(endDate.getMonth() - 6);
         else if (currentPeriod === '1y') startDate = new Date(endDate).setFullYear(endDate.getFullYear() - 1);
+
         const filtered = rawData.filter(row => row.start_time && new Date(row.start_time) >= startDate);
         const exData = filtered.filter(r => r.exercise_title === ex);
+
         updateQuickStats(exData);
-        updateRecommendations(ex);
+        updateRecommendations(ex); // Nieuwe Voorspellingsfunctie!
         renderProgression(exData, ex);
         renderVolume(exData, ex);
         renderWeeklyDuration(filtered);
         renderDayOfWeek(filtered);
     }
 
+    // --- NIEUWE FUNCTIE: PROGRESSIVE OVERLOAD VOORSPELLER ---
     function updateRecommendations(exerciseName) {
         const recContent = document.getElementById('recContent');
+        
+        // 1. Pak ruwe data van deze oefening van MAX 6 WEKEN OUD (gerekend vanaf nieuwste data punt in CSV)
         const sixWeeksAgo = new Date(globalMaxDate);
-        sixWeeksAgo.setDate(sixWeeksAgo.getDate() - 42);
-        const recentData = rawData.filter(r => r.exercise_title === exerciseName && new Date(r.start_time) >= sixWeeksAgo && r.weight_kg > 0 && r.set_type !== "warmup");
-        if (recentData.length === 0) { recContent.innerHTML = "<em>Niet genoeg data (werksets) in de laatste 6 weken.</em>"; return; }
+        sixWeeksAgo.setDate(sixWeeksAgo.getDate() - 42); // 6 weken = 42 dagen
+
+        const recentData = rawData.filter(r => 
+            r.exercise_title === exerciseName && 
+            new Date(r.start_time) >= sixWeeksAgo && 
+            r.weight_kg > 0 && 
+            r.set_type !== "warmup" // Negeer opwarmsets indien mogelijk
+        );
+
+        if (recentData.length === 0) {
+            recContent.innerHTML = "<em>Niet genoeg data (werksets) in de laatste 6 weken om progressie op te baseren. Probeer een baseline neer te zetten!</em>";
+            return;
+        }
+
+        // 2. Zoek de meest recente sessie binnen die 6 weken
         let lastSessionDate = new Date(0);
-        recentData.forEach(r => { const d = new Date(r.start_time); if(d > lastSessionDate) lastSessionDate = d; });
+        recentData.forEach(r => {
+            const d = new Date(r.start_time);
+            if(d > lastSessionDate) lastSessionDate = d;
+        });
+        
         const lastSessionStr = lastSessionDate.toISOString().split('T')[0];
         const lastSessionSets = recentData.filter(r => new Date(r.start_time).toISOString().split('T')[0] === lastSessionStr);
-        let topWeight = 0, repsAtTopWeight = 0;
-        lastSessionSets.forEach(s => { if (s.weight_kg > topWeight) { topWeight = s.weight_kg; repsAtTopWeight = s.reps; } else if (s.weight_kg === topWeight && s.reps > repsAtTopWeight) { repsAtTopWeight = s.reps; } });
-        let targetWeight = topWeight, targetReps = repsAtTopWeight, advice = "";
-        if (repsAtTopWeight >= 8) { targetWeight += 2.5; targetReps = Math.max(5, repsAtTopWeight - 2); advice = `Focus op zwaarder gewicht.`; }
-        else { targetReps += 1; advice = `Focus op reps verhogen.`; }
+
+        // 3. Zoek de zwaarste topset van die sessie
+        let topWeight = 0;
+        let repsAtTopWeight = 0;
+        lastSessionSets.forEach(s => {
+            if (s.weight_kg > topWeight) {
+                topWeight = s.weight_kg;
+                repsAtTopWeight = s.reps;
+            } else if (s.weight_kg === topWeight && s.reps > repsAtTopWeight) {
+                repsAtTopWeight = s.reps;
+            }
+        });
+
+        // 4. Bepaal Advies
+        let advice = "";
+        let targetWeight = topWeight;
+        let targetReps = repsAtTopWeight;
+
+        if (repsAtTopWeight >= 8) {
+            // Makkelijk gehaald, gewicht omhoog!
+            targetWeight += 2.5; 
+            targetReps = Math.max(5, repsAtTopWeight - 2); 
+            advice = `Je haalde soepel ${repsAtTopWeight} reps. Tijd om het gewicht te verhogen!`;
+        } else {
+            // Moeite mee, reps proberen te verhogen
+            targetReps += 1;
+            advice = `Je volume moet iets omhoog. Probeer 1 extra rep te halen met hetzelfde gewicht.`;
+        }
+
+        // Afronden naar dichtstbijzijnde 0.5kg (voor schijven in de gym)
         const roundHalf = (num) => Math.round(num * 2) / 2;
         targetWeight = roundHalf(targetWeight);
-        recContent.innerHTML = `<div class="recommendation-box"><strong>Vorige:</strong> ${topWeight}kg × ${repsAtTopWeight}<br><strong>Target:</strong> ${targetWeight}kg × ${targetReps}</div>`;
+        const backoff1 = roundHalf(targetWeight * 0.9);
+        const backoff2 = roundHalf(targetWeight * 0.8);
+
+        // 5. Render in HTML
+        recContent.innerHTML = `
+            <div class="recommendation-box">
+                <strong>Vorige sessie (${lastSessionDate.toLocaleDateString()}):</strong> ${topWeight} kg × ${repsAtTopWeight} reps<br>
+                <span style="color: var(--purple); font-weight: 600;">💡 Actie: ${advice}</span>
+            </div>
+            <table>
+                <tr style="border-bottom: 1px solid #e2e8f0;">
+                    <td style="padding: 10px 0;"><strong>Set 1 (Top Set)</strong></td>
+                    <td style="text-align: right; color: var(--purple); font-weight: bold; font-size: 16px;">${targetWeight} kg × ${targetReps}</td>
+                </tr>
+                <tr style="border-bottom: 1px solid #e2e8f0;">
+                    <td style="padding: 10px 0;"><strong>Set 2 (Back-off)</strong></td>
+                    <td style="text-align: right; font-weight: bold;">${backoff1} kg × ${targetReps + 2}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px 0;"><strong>Set 3 (Volume)</strong></td>
+                    <td style="text-align: right; font-weight: bold;">${backoff2} kg × ${targetReps + 4}</td>
+                </tr>
+            </table>
+        `;
     }
 
     function updateQuickStats(data) {
         let maxW = 0, max1RM = 0, totalVol = 0, sets = 0;
         data.forEach(r => {
-            const w = r.weight_kg || 0, reps = r.reps || 0;
+            const w = r.weight_kg || 0;
+            const reps = r.reps || 0;
             const m = reps > 1 ? w * (1 + (reps / 30)) : w;
-            if (w > maxW) maxW = w; if (m > max1RM) max1RM = m;
+            if (w > maxW) maxW = w;
+            if (m > max1RM) max1RM = m;
             if (w > 0 && reps > 0) { totalVol += (w * reps); sets++; }
         });
-        document.getElementById('qsMaxWeight').textContent = maxW + " kg";
-        document.getElementById('qsMax1RM').textContent = Math.round(max1RM) + " kg";
-        document.getElementById('qsTotalVolume').textContent = totalVol.toLocaleString() + " kg";
+
+        document.getElementById('qsMaxWeight').textContent = maxW > 0 ? maxW + " kg" : "-";
+        document.getElementById('qsMax1RM').textContent = max1RM > 0 ? Math.round(max1RM) + " kg" : "-";
+        document.getElementById('qsTotalVolume').textContent = totalVol > 0 ? totalVol.toLocaleString() + " kg" : "-";
         document.getElementById('qsTotalSets').textContent = sets;
+
         updateRepTable(max1RM);
     }
 
     function updateRepTable(oneRM) {
         const tbody = document.getElementById('repTableBody');
         tbody.innerHTML = '';
-        if(oneRM < 10) return;
+        if(oneRM < 10) {
+            tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;">Onvoldoende data.</td></tr>';
+            return;
+        }
+
         const maxDisplay = Math.ceil(oneRM / 5) * 5;
         let rows = "";
         for (let w = maxDisplay; w >= oneRM * 0.5; w -= (oneRM > 100 ? 10 : 5)) {
             if(w < 5) break;
-            let reps = w < oneRM ? Math.round(30 * (oneRM / w - 1)) : 1;
-            rows += `<tr><td>${w} kg</td><td class="highlight">${reps}</td><td><small>${reps <= 5 ? 'Kracht' : 'Body'}</small></td></tr>`;
+            let reps = 1;
+            if(w < oneRM) reps = Math.round(30 * (oneRM / w - 1));
+            else if (w > oneRM + 5) continue;
+
+            const zone = reps <= 5 ? "Kracht" : (reps <= 12 ? "Hypertrofie" : "Uithoudingsvermogen");
+            rows += `<tr><td>${w} kg</td><td class="highlight">${reps}</td><td><small>${zone}</small></td></tr>`;
         }
         tbody.innerHTML = rows;
     }
@@ -426,43 +447,71 @@
             const m = (r.reps || 0) > 1 ? r.weight_kg * (1 + (r.reps / 30)) : r.weight_kg;
             if (!daily[dStr] || m > daily[dStr].m) daily[dStr] = { w: r.weight_kg, m: m, ts: new Date(r.start_time).getTime() };
         });
-        const sorted = Object.keys(daily).sort((a,b) => daily[a].ts - daily[b].ts);
+        const sortedDates = Object.keys(daily).sort((a,b) => daily[a].ts - daily[b].ts);
         if (progressionChartInst) progressionChartInst.destroy();
-        progressionChartInst = new Chart(document.getElementById('progressionChart'), { type: 'line', data: { labels: sorted, datasets: [{ label: '1RM Est.', data: sorted.map(d => Math.round(daily[d].m)), borderColor: '#ef4444', tension: 0.3 }] } });
+        progressionChartInst = new Chart(document.getElementById('progressionChart'), {
+            type: 'line', data: { labels: sortedDates, datasets: [
+                { label: 'Max Gewicht', data: sortedDates.map(d => daily[d].w), borderColor: '#2563eb', tension: 0.3 },
+                { label: '1RM Est.', data: sortedDates.map(d => Math.round(daily[d].m)), borderColor: '#ef4444', borderDash: [5,5], tension: 0.3 }
+            ]}, options: { responsive: true, maintainAspectRatio: false, plugins: { title: { display: true, text: 'Krachtverloop' } } }
+        });
     }
 
     function renderVolume(data, ex) {
         const dailyVol = {};
-        data.filter(r => r.weight_kg > 0).forEach(r => {
+        data.filter(r => r.weight_kg > 0 && r.reps > 0).forEach(r => {
             const dStr = new Date(r.start_time).toISOString().split('T')[0];
             if (!dailyVol[dStr]) dailyVol[dStr] = { vol: 0, ts: new Date(r.start_time).getTime() };
             dailyVol[dStr].vol += r.weight_kg * r.reps;
         });
-        const sorted = Object.keys(dailyVol).sort((a,b) => dailyVol[a].ts - dailyVol[b].ts);
+        const sortedDates = Object.keys(dailyVol).sort((a,b) => dailyVol[a].ts - dailyVol[b].ts);
         if (volumeChartInst) volumeChartInst.destroy();
-        volumeChartInst = new Chart(document.getElementById('volumeChart'), { type: 'bar', data: { labels: sorted, datasets: [{ label: 'Volume (kg)', data: sorted.map(d => dailyVol[d].vol), backgroundColor: '#8b5cf6' }] } });
+        volumeChartInst = new Chart(document.getElementById('volumeChart'), {
+            type: 'bar', data: { labels: sortedDates, datasets: [{ label: 'Totaal Volume (kg)', data: sortedDates.map(d => dailyVol[d].vol), backgroundColor: '#8b5cf6', borderRadius: 4 }] },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { title: { display: true, text: 'Trainingsvolume per Sessie' } } }
+        });
     }
 
     function renderWeeklyDuration(data) {
-        const weeklyDataMap = {}; const workoutSeen = new Set();
+        const weeklyDataMap = {};
+        const workoutSeen = new Set();
         data.forEach(r => {
             if (!r.start_time || !r.end_time) return;
-            const key = r.title + r.start_time; if (workoutSeen.has(key)) return; workoutSeen.add(key);
-            const start = new Date(r.start_time); const info = getWeekInfo(start);
-            const label = `W${info.num}`; if (!weeklyDataMap[label]) weeklyDataMap[label] = { hours: 0, ts: info.timestamp };
+            const key = r.title + r.start_time;
+            if (workoutSeen.has(key)) return;
+            workoutSeen.add(key);
+            const start = new Date(r.start_time);
+            const info = getWeekInfo(start);
+            const label = `W${info.num} (${info.year})`;
+            if (!weeklyDataMap[label]) weeklyDataMap[label] = { hours: 0, ts: info.timestamp };
             weeklyDataMap[label].hours += (new Date(r.end_time) - start) / 3600000;
         });
-        const sorted = Object.keys(weeklyDataMap).sort((a, b) => weeklyDataMap[a].ts - weeklyDataMap[b].ts);
+        const sortedLabels = Object.keys(weeklyDataMap).sort((a, b) => weeklyDataMap[a].ts - weeklyDataMap[b].ts);
         if (durationChartInst) durationChartInst.destroy();
-        durationChartInst = new Chart(document.getElementById('durationChart'), { type: 'line', data: { labels: sorted, datasets: [{ label: 'Uren', data: sorted.map(l => weeklyDataMap[l].hours.toFixed(1)), borderColor: '#10b981' }] } });
+        durationChartInst = new Chart(document.getElementById('durationChart'), {
+            type: 'line', data: { labels: sortedLabels, datasets: [{ label: 'Uren', data: sortedLabels.map(l => weeklyDataMap[l].hours.toFixed(1)), borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.1)', fill: true, tension: 0.4 }] },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { title: { display: true, text: 'Uren per week (Totaal)' } } }
+        });
     }
 
     function renderDayOfWeek(data) {
-        const daysCount = [0, 0, 0, 0, 0, 0, 0]; const workoutSeen = new Set();
-        data.forEach(r => { if (!r.start_time) return; const key = r.title + r.start_time; if (workoutSeen.has(key)) return; workoutSeen.add(key); daysCount[new Date(r.start_time).getDay()]++; });
-        const reordered = [...daysCount.slice(1), daysCount[0]];
+        const daysCount = [0, 0, 0, 0, 0, 0, 0];
+        const dayNames = ['Zon', 'Maa', 'Din', 'Woe', 'Don', 'Vri', 'Zat'];
+        const workoutSeen = new Set();
+        data.forEach(r => {
+            if (!r.start_time) return;
+            const key = r.title + r.start_time;
+            if (workoutSeen.has(key)) return;
+            workoutSeen.add(key);
+            daysCount[new Date(r.start_time).getDay()]++;
+        });
+        const reorderedCounts = [...daysCount.slice(1), daysCount[0]];
+        const reorderedNames = [...dayNames.slice(1), dayNames[0]];
         if (dowChartInst) dowChartInst.destroy();
-        dowChartInst = new Chart(document.getElementById('dowChart'), { type: 'bar', data: { labels: ['Ma', 'Di', 'Wo', 'Do', 'Vr', 'Za', 'Zo'], datasets: [{ label: 'Sessies', data: reordered, backgroundColor: '#f59e0b' }] } });
+        dowChartInst = new Chart(document.getElementById('dowChart'), {
+            type: 'bar', data: { labels: reorderedNames, datasets: [{ label: 'Sessies', data: reorderedCounts, backgroundColor: '#f59e0b', borderRadius: 4 }] },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { title: { display: true, text: 'Frequentie per Dag' } } }
+        });
     }
 </script>
 </body>
