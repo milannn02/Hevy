@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Trainingslogboek — Hevy CSV-analyse</title>
+<meta name="description" content="Analyseer je Hevy-trainingsexport: progressie, PR's, spiergroepbalans en slimme volgende-sessie targets. Volledig lokaal in je browser.">
+
+<!-- PWA -->
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#13151A">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Logboek">
+<link rel="icon" href="icons/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="icons/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Archivo+Black&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css?v=3">
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="brand">
+    <div class="barbell" aria-hidden="true"><i class="bar"></i><i class="p15"></i><i class="p20"></i><i class="p25"></i><i class="bar"></i></div>
+    <h1>Trainingslogboek<small>Hevy CSV-analyse</small></h1>
+  </div>
+  <div class="headtools">
+    <button class="btn ghost sm" id="installBtn" style="display:none">Installeren</button>
+    <div class="periods" id="periods" style="display:none">
+      <button data-p="3m">3M</button>
+      <button data-p="6m">6M</button>
+      <button data-p="1y">1J</button>
+      <button data-p="all" class="active">Alles</button>
+    </div>
+  </div>
+</header>
+
+<div id="uploadHero">
+  <h2>Sleep je Hevy-export hierheen</h2>
+  <p>Exporteer in Hevy via <b>Profiel → Instellingen → Export Workout Data</b>. Het bestand wordt direct naar je telefoon gedownload. Alles wordt lokaal in je browser verwerkt; er wordt niets geüpload.</p>
+  <div class="herobtns">
+    <button class="btn" id="pickBtn">Kies CSV-bestand</button>
+    <button class="btn ghost" id="demoBtn">Probeer met voorbeelddata</button>
+  </div>
+  <input type="file" id="fileInput" accept=".csv,text/csv">
+  <div class="hint" id="fileMeta">Nog geen bestand geladen</div>
+</div>
+
+<div id="dataBar">
+  <div class="info">
+    <div class="ok" aria-hidden="true">✓</div>
+    <div class="txt">
+      <div class="name" id="dbName">—</div>
+      <div class="meta" id="dbMeta">—</div>
+    </div>
+  </div>
+  <div class="acts">
+    <button class="btn ghost sm" id="newBtn">Nieuw bestand</button>
+    <button class="btn ghost sm" id="demoBtn2">Voorbeelddata</button>
+    <button class="btn ghost sm" id="clearBtn">Wissen</button>
+  </div>
+</div>
+
+<div id="app">
+
+<nav class="tabs" id="tabs">
+  <button data-tab="overzicht" class="active">Overzicht</button>
+  <button data-tab="progressie">Progressie</button>
+  <button data-tab="prs">PR's</button>
+  <button data-tab="spieren">Spiergroepen</button>
+  <button data-tab="suggesties">Suggesties</button>
+  <button data-tab="plan">Plan</button>
+</nav>
+
+<!-- ================= OVERZICHT ================= -->
+<section class="tab show" id="tab-overzicht">
+  <div class="kpis">
+    <div class="kpi" style="--kc:var(--plate-red)"><b id="kWorkouts">–</b><span>Workouts</span></div>
+    <div class="kpi" style="--kc:var(--plate-blue)"><b id="kVolume">–</b><span>Totaal volume</span></div>
+    <div class="kpi" style="--kc:var(--plate-yellow)"><b id="kSets">–</b><span>Werksets</span></div>
+    <div class="kpi" style="--kc:var(--plate-green)"><b id="kHours">–</b><span>Trainingsuren</span></div>
+    <div class="kpi" style="--kc:var(--plate-white)"><b id="kFreq">–</b><span>Per week (gem.)</span></div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <h3>Workouts per week</h3>
+      <p class="sub">Consistentie over de gekozen periode</p>
+      <div class="chartbox"><canvas id="chFreq"></canvas></div>
+    </div>
+    <div class="card">
+      <h3>Volume per week</h3>
+      <p class="sub">Totaal getild gewicht (kg × reps, excl. warm-ups)</p>
+      <div class="chartbox"><canvas id="chWeekVol"></canvas></div>
+    </div>
+    <div class="card">
+      <h3>Trainingsdagen</h3>
+      <p class="sub">Verdeling over de week</p>
+      <div class="chartbox"><canvas id="chDow"></canvas></div>
+    </div>
+    <div class="card">
+      <h3>Sessieduur</h3>
+      <p class="sub">Gemiddelde duur per maand (minuten)</p>
+      <div class="chartbox"><canvas id="chDur"></canvas></div>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <h3>Recente PR's</h3>
+      <p class="sub">Nieuwe records (geschatte 1RM) in de laatste 30 dagen van de data</p>
+      <div class="scrollt"><table>
+        <thead><tr><th>Datum</th><th>Oefening</th><th class="num">Set</th><th class="num">e1RM</th></tr></thead>
+        <tbody id="recentPrBody"></tbody>
+      </table></div>
+    </div>
+    <div class="card">
+      <h3>Laatste workouts</h3>
+      <p class="sub">De 8 meest recente sessies</p>
+      <div class="scrollt"><table>
+        <thead><tr><th>Datum</th><th>Workout</th><th class="num">Sets</th><th class="num">Volume</th><th class="num">Duur</th></tr></thead>
+        <tbody id="recentWoBody"></tbody>
+      </table></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= PROGRESSIE ================= -->
+<section class="tab" id="tab-progressie">
+  <div class="card">
+    <h3>Oefening kiezen</h3>
+    <p class="sub">Typ een naam of klik op een van je meest getrainde oefeningen</p>
+    <input list="exList" id="exInput" placeholder="Bijv. Bench Press (Barbell)…" autocomplete="off">
+    <datalist id="exList"></datalist>
+    <div class="chips" id="exChips"></div>
+  </div>
+
+  <div class="kpis" style="grid-template-columns:repeat(2,1fr)" id="exKpis">
+    <div class="kpi" style="--kc:var(--plate-red)"><b id="eMaxW">–</b><span>Zwaarste set</span></div>
+    <div class="kpi" style="--kc:var(--plate-blue)"><b id="e1RM">–</b><span>Beste e1RM</span></div>
+    <div class="kpi" style="--kc:var(--plate-yellow)"><b id="eSets">–</b><span>Werksets</span></div>
+    <div class="kpi" style="--kc:var(--plate-green)"><b id="eTrend">–</b><span>Trend (6 wk)</span></div>
+  </div>
+
+  <div class="card">
+    <h3>Krachtprogressie</h3>
+    <p class="sub">Topgewicht en geschatte 1RM (Epley) per sessie</p>
+    <div class="chartbox tall"><canvas id="chProg"></canvas></div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <h3>Volume per sessie</h3>
+      <p class="sub">Werkvolume van deze oefening</p>
+      <div class="chartbox"><canvas id="chExVol"></canvas></div>
+    </div>
+    <div class="card">
+      <h3>Rep-doelen bij je huidige 1RM</h3>
+      <p class="sub">Richtlijn per gewicht (Epley, omgekeerd)</p>
+      <div class="scrollt"><table>
+        <thead><tr><th class="num">Gewicht</th><th class="num">% 1RM</th><th class="num">Reps</th><th>Zone</th></tr></thead>
+        <tbody id="repTable"></tbody>
+      </table></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Sessiegeschiedenis</h3>
+    <p class="sub">Laatste 12 sessies van deze oefening</p>
+    <div class="scrollt"><table>
+      <thead><tr><th>Datum</th><th class="num">Topset</th><th class="num">e1RM</th><th class="num">Sets</th><th class="num">Volume</th><th></th></tr></thead>
+      <tbody id="histBody"></tbody>
+    </table></div>
+  </div>
+</section>
+
+<!-- ================= PR'S ================= -->
+<section class="tab" id="tab-prs">
+  <div class="card">
+    <h3>PR-overzicht per oefening</h3>
+    <p class="sub">All-time records binnen de gekozen periode. Klik op een kolomkop om te sorteren.</p>
+    <input type="text" id="prSearch" placeholder="Filter op naam… (bijv. curl)" style="max-width:340px;margin-bottom:12px">
+    <div class="scrollt"><table>
+      <thead><tr>
+        <th class="sortable" data-k="name">Oefening</th>
+        <th class="num sortable" data-k="maxW">Zwaarste set</th>
+        <th class="num sortable" data-k="e1rm">e1RM</th>
+        <th class="sortable" data-k="date">Datum PR</th>
+        <th class="num sortable" data-k="sessions">Sessies</th>
+        <th class="num sortable" data-k="sets">Sets</th>
+      </tr></thead>
+      <tbody id="prBody"></tbody>
+    </table></div>
+  </div>
+</section>
+
+<!-- ================= SPIERGROEPEN ================= -->
+<section class="tab" id="tab-spieren">
+  <div class="grid2">
+    <div class="card">
+      <h3>Werksets per spiergroep per week</h3>
+      <p class="sub">Laatste 8 weken — richtlijn: 10–20 sets per spiergroep per week</p>
+      <div class="chartbox tall"><canvas id="chMuscleWeek"></canvas></div>
+    </div>
+    <div class="card">
+      <h3>Verdeling over de periode</h3>
+      <p class="sub">Aandeel werksets per spiergroep</p>
+      <div class="chartbox tall"><canvas id="chMuscleShare"></canvas></div>
+    </div>
+  </div>
+  <div class="card">
+    <h3>Push / Pull-balans</h3>
+    <p class="sub">Verhouding werksets duwen (borst, voorkant schouders, triceps) vs. trekken (rug, biceps, achterkant schouders)</p>
+    <div id="ppBalance"></div>
+  </div>
+</section>
+
+<!-- ================= SUGGESTIES ================= -->
+<section class="tab" id="tab-suggesties">
+  <div class="card">
+    <h3>Volgende-sessie targets</h3>
+    <p class="sub">Dubbele progressie op basis van je laatste sessies (warm-ups uitgesloten). Haal je het rep-doel? Dan gewicht omhoog volgende keer.</p>
+    <div id="suggList"></div>
+  </div>
+
+  <div class="card" id="bench">
+    <h3>Krachtbenchmark</h3>
+    <p class="sub">Je geschatte 1RM afgezet tegen je lichaamsgewicht (algemene krachtstandaarden)</p>
+    <div class="formrow" style="max-width:420px">
+      <div><label class="lbl" for="bwInput">Lichaamsgewicht (kg)</label><input type="number" id="bwInput" value="80" min="30" max="250"></div>
+      <div><label class="lbl" for="sexInput">Geslacht</label><select id="sexInput"><option value="m">Man</option><option value="f">Vrouw</option></select></div>
+    </div>
+    <div class="benchgrid" id="benchGrid"></div>
+  </div>
+</section>
+
+<!-- ================= PLAN ================= -->
+<section class="tab" id="tab-plan">
+  <div class="card">
+    <h3>Trainingsplan genereren</h3>
+    <p class="sub">Kies je instellingen — het plan vult elke dag met <b>jouw eigen oefeningen</b> uit je data (met terugval op standaardoefeningen) en zet richtgewichten op basis van je 1RM.</p>
+    <div class="formrow">
+      <div><label class="lbl" for="planDays">Trainingsdagen / week</label>
+        <select id="planDays"><option>2</option><option>3</option><option selected>4</option><option>5</option><option>6</option></select></div>
+      <div><label class="lbl" for="planSplit">Split</label>
+        <select id="planSplit">
+          <option value="auto" selected>Automatisch</option>
+          <option value="ppl">Push / Pull / Legs</option>
+          <option value="ul">Upper / Lower</option>
+          <option value="ap">Anterior / Posterior</option>
+          <option value="fb">Full body</option>
+        </select></div>
+      <div><label class="lbl" for="planGoal">Doel</label>
+        <select id="planGoal"><option value="hyp" selected>Spiergroei</option><option value="str">Kracht</option></select></div>
+      <div><label class="lbl" for="planWeeks">Aantal weken</label>
+        <select id="planWeeks"><option>4</option><option selected>6</option><option>8</option><option>12</option></select></div>
+    </div>
+    <div style="margin-top:14px"><button class="btn" id="planGen">Genereer plan</button></div>
+  </div>
+  <div id="planOut"></div>
+</section>
+
+</div><!-- /app -->
+
+<footer>
+  Gemaakt voor Hevy CSV-exports · Alle berekeningen lokaal in je browser · e1RM via Epley-formule<br>
+  Je data blijft op dit apparaat en wordt nergens geüpload.
+</footer>
+</div>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script src="vendor/papaparse.min.js"></script>
+<script src="vendor/chart.umd.min.js"></script>
+<script src="app.js?v=3"></script>
+</body>
+</html>

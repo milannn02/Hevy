@@ -1,0 +1,11 @@
+# Lokale dev-tooling (niet nodig voor de site)
+.claude/
+
+# OS-rommel
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Test-/tijdelijke bestanden
+_real.csv
+*.tmp
