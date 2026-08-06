@@ -223,3 +223,13 @@ footer a{color:var(--muted)}
 .musc-sum .n.low{color:var(--plate-yellow)}
 .musc-sum .n.ok{color:#5FD49B}
 .musc-sum .n.high{color:#FF8C8C}
+
+/* ---------- wetenschap ---------- */
+.card h4{margin:20px 0 8px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+.card h4:first-child{margin-top:0}
+.refs{margin:6px 0 0;padding-left:18px;font-size:12px;color:var(--muted);line-height:1.7}
+.refs li{margin-bottom:3px}
+.sci td{vertical-align:top}
+.sci .v{font:600 11px var(--mono);white-space:nowrap}
+.chg{margin:6px 0 0;padding-left:18px;font-size:13px;line-height:1.7}
+.chg li{margin-bottom:3px}

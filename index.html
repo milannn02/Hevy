@@ -20,7 +20,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Archivo+Black&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=3">
+<link rel="stylesheet" href="styles.css?v=4">
 </head>
 <body>
 <div class="wrap">
@@ -76,6 +76,7 @@
   <button data-tab="spieren">Spiergroepen</button>
   <button data-tab="suggesties">Suggesties</button>
   <button data-tab="plan">Plan</button>
+  <button data-tab="wetenschap">Wetenschap</button>
 </nav>
 
 <!-- ================= OVERZICHT ================= -->
@@ -96,7 +97,7 @@
     </div>
     <div class="card">
       <h3>Volume per week</h3>
-      <p class="sub">Totaal getild gewicht (kg × reps, excl. warm-ups)</p>
+      <p class="sub">Totaal getild gewicht (kg × reps, excl. warm-ups) — een werklast-indicator, niet dé maat voor spiergroei (daarvoor tellen sets, zie Spiergroepen)</p>
       <div class="chartbox"><canvas id="chWeekVol"></canvas></div>
     </div>
     <div class="card">
@@ -162,7 +163,7 @@
     </div>
     <div class="card">
       <h3>Rep-doelen bij je huidige 1RM</h3>
-      <p class="sub">Richtlijn per gewicht (Epley, omgekeerd)</p>
+      <p class="sub">Richtlijn per gewicht (Epley, omgekeerd). Zones zijn indicatief — spiergroei werkt over een breed rep-bereik; zie Wetenschap</p>
       <div class="scrollt"><table>
         <thead><tr><th class="num">Gewicht</th><th class="num">% 1RM</th><th class="num">Reps</th><th>Zone</th></tr></thead>
         <tbody id="repTable"></tbody>
@@ -184,7 +185,7 @@
 <section class="tab" id="tab-prs">
   <div class="card">
     <h3>PR-overzicht per oefening</h3>
-    <p class="sub">All-time records binnen de gekozen periode. Klik op een kolomkop om te sorteren.</p>
+    <p class="sub">All-time records binnen de gekozen periode. Klik op een kolomkop om te sorteren. <span style="color:var(--plate-yellow)">*</span> = e1RM geschat uit meer dan 12 reps (minder betrouwbaar).</p>
     <input type="text" id="prSearch" placeholder="Filter op naam… (bijv. curl)" style="max-width:340px;margin-bottom:12px">
     <div class="scrollt"><table>
       <thead><tr>
@@ -205,7 +206,7 @@
   <div class="grid2">
     <div class="card">
       <h3>Werksets per spiergroep per week</h3>
-      <p class="sub">Laatste 8 weken — richtlijn: 10–20 sets per spiergroep per week</p>
+      <p class="sub">Laatste 8 weken · richtlijn ~10–20 sets/spiergroep/week (ondergrens goed onderbouwd; boven ~15–20 is het bewijs zwakker, en het geldt voor sets dicht bij falen)</p>
       <div class="chartbox tall"><canvas id="chMuscleWeek"></canvas></div>
     </div>
     <div class="card">
@@ -225,7 +226,7 @@
 <section class="tab" id="tab-suggesties">
   <div class="card">
     <h3>Volgende-sessie targets</h3>
-    <p class="sub">Dubbele progressie op basis van je laatste sessies (warm-ups uitgesloten). Haal je het rep-doel? Dan gewicht omhoog volgende keer.</p>
+    <p class="sub">Dubbele progressie op basis van je laatste sessies (warm-ups uitgesloten). Haal je het rep-doel? Dan gewicht omhoog volgende keer. Fijne stappen (1/0,5 kg) vergen microplaten of dumbbells/machines.</p>
     <div id="suggList"></div>
   </div>
 
@@ -237,6 +238,7 @@
       <div><label class="lbl" for="sexInput">Geslacht</label><select id="sexInput"><option value="m">Man</option><option value="f">Vrouw</option></select></div>
     </div>
     <div class="benchgrid" id="benchGrid"></div>
+    <p class="sub" style="margin:14px 0 0">Standaarden komen uit zelf-gerapporteerde data van trainings-apps (StrengthLevel/ExRx-achtig), niet uit een representatieve steekproef, en gelden voor jong-volwassenen. Ze negeren bovendien lichaamsgewicht-schaling (zwaardere lifters benadeeld; vgl. Wilks/DOTS) en leeftijd. Zie Wetenschap.</p>
   </div>
 </section>
 
@@ -258,12 +260,68 @@
         </select></div>
       <div><label class="lbl" for="planGoal">Doel</label>
         <select id="planGoal"><option value="hyp" selected>Spiergroei</option><option value="str">Kracht</option></select></div>
+      <div><label class="lbl" for="planLevel">Niveau</label>
+        <select id="planLevel"><option value="nov" selected>Beginner</option><option value="adv">Gevorderd</option></select></div>
       <div><label class="lbl" for="planWeeks">Aantal weken</label>
         <select id="planWeeks"><option>4</option><option selected>6</option><option>8</option><option>12</option></select></div>
     </div>
     <div style="margin-top:14px"><button class="btn" id="planGen">Genereer plan</button></div>
   </div>
   <div id="planOut"></div>
+</section>
+
+<!-- ================= WETENSCHAP ================= -->
+<section class="tab" id="tab-wetenschap">
+  <div class="card">
+    <h3>Wetenschap &amp; methode</h3>
+    <p class="sub">Elke formule en vuistregel in de app is onafhankelijk tegen de literatuur getoetst (audit C1–C16, met citaat-verificatie). Hieronder: wat de app doet, hoe sterk het bewijs is, en de belangrijkste kanttekening. Bewijsniveau: <b>A</b> = meta-analyse · <b>B</b> = RCT('s) · <b>C</b> = observationeel/mechanistisch · <b>D</b> = conventie/norm.</p>
+
+    <h4>Doorgevoerd naar aanleiding van de audit</h4>
+    <ul class="chg">
+      <li><b>Plateau &amp; trend</b> nu via een ruis-robuuste regressie over ~6 weken, i.p.v. een 0,2%-drempel die onder de meetruis (~4%) lag en valse plateaus gaf.</li>
+      <li><b>Plan → Niveau</b> (Beginner/Gevorderd): beginners hogen wekelijks op, gevorderden om de week — wekelijkse lineaire progressie is alleen realistisch voor beginners. Richtgewichten zijn expliciet een <i>startpunt</i>.</li>
+      <li><b>e1RM uit &gt;12 reps</b> wordt gemarkeerd met een <span style="color:var(--plate-yellow)">*</span> (minder betrouwbaar).</li>
+      <li><b>Rep-bereik, zones, push/pull-balans, benchmark en volume</b> zijn herkaderd met de nuances hieronder.</li>
+    </ul>
+
+    <h4>Claims &amp; bewijs</h4>
+    <div class="scrollt"><table class="sci">
+      <thead><tr><th>Onderdeel</th><th>Wat de app doet</th><th class="v">Bewijs</th><th>Kanttekening</th></tr></thead>
+      <tbody>
+        <tr><td>e1RM (C1)</td><td>gewicht × (1 + reps/30)</td><td class="v">C</td><td>Betrouwbaar tot ~10 reps; onderschat deadlift; &gt;12 reps gemarkeerd met *.</td></tr>
+        <tr><td>Rep-doelen (C2)</td><td>omgekeerde Epley</td><td class="v">C</td><td>Exacte algebra, maar erft Epley-fout bij hoge reps/lichte lasten.</td></tr>
+        <tr><td>%1RM-zones (C3)</td><td>≥90% kracht · 75–90% groei · &lt;75% volume</td><td class="v">D</td><td>Labels zijn indicatief; groei kan over een breed bereik.</td></tr>
+        <tr><td>Rep-bereik ↔ doel (C4)</td><td>kracht 4–6 · groei 6–15</td><td class="v">B</td><td>Groei werkt ~5–30+ reps mits dicht bij falen; kracht is wél load-specifiek (&ge;80% 1RM).</td></tr>
+        <tr><td>10–20 sets/week (C5)</td><td>richtlijn per spiergroep</td><td class="v">B</td><td>Ondergrens (~10) goed onderbouwd; bovengrens zwakker; geldt voor sets dicht bij falen.</td></tr>
+        <tr><td>Dubbele progressie (C6)</td><td>reps vol → gewicht omhoog</td><td class="v">D</td><td>Praktische conventie; geen RCT die 'm superieur toont.</td></tr>
+        <tr><td>Rep-caps &amp; stappen (C7)</td><td>cap 8/12 · +2,5/1/0,5 kg</td><td class="v">D</td><td>Stappen &lt;2,5 kg vergen microplaten; caps zijn een keuze.</td></tr>
+        <tr><td>Werkgewicht-formule (C8)</td><td>e1RM/(1+lo/30) × 0,88, wekelijks +</td><td class="v">D</td><td>0,88 is heuristiek (~2–3 RIR); lineair alleen voor beginners — nu instelbaar via Niveau.</td></tr>
+        <tr><td>Push/Pull (C9)</td><td>ratio, ~1 = balans</td><td class="v">D</td><td>Geen bewijs voor één "juiste" ratio; meer trekken is vaak prima.</td></tr>
+        <tr><td>Plateau/trend (C10)</td><td>regressie over ~6 weken</td><td class="v">A</td><td>Vervangt de te gevoelige 0,2%-drempel (meetruis 1RM ~4%).</td></tr>
+        <tr><td>Krachtstandaarden (C11)</td><td>× lichaamsgewicht per geslacht</td><td class="v">D</td><td>Zelf-gerapporteerde data; jong-volwassen; negeert lichaamsgewicht-schaling en leeftijd.</td></tr>
+        <tr><td>Geslacht/leeftijd (C12)</td><td>man/vrouw, geen leeftijd</td><td class="v">C</td><td>Beperking; leeftijd verschuift de normen.</td></tr>
+        <tr><td>Volume = tonnage (C13)</td><td>Σ gewicht × reps</td><td class="v">A</td><td>Werklast-maat, niet dé groeimaat; sets zijn daarvoor beter (die telt de app apart).</td></tr>
+        <tr><td>Lichaamsgewicht = 0 kg (C14)</td><td>geen externe last → 0 volume</td><td class="v">✓</td><td>Klopt; sets tellen wél mee per spiergroep.</td></tr>
+        <tr><td>e1RM cross-lift (C15)</td><td>e1RM als score</td><td class="v">B</td><td>Minder betrouwbaar &gt;12 reps en bij technische (olympische) lifts.</td></tr>
+        <tr><td>Spiergroep op naam (C16)</td><td>muscleOf()</td><td class="v">C</td><td>Grove toewijzing op trefwoorden; edge-cases (upright row, hip thrust) benoemd.</td></tr>
+      </tbody>
+    </table></div>
+
+    <h4>Bronnen (geverifieerd in de audit)</h4>
+    <ul class="refs">
+      <li>Epley B. (1985). <i>Poundage Chart.</i> Boyd Epley Workout, Lincoln NE. — herkomst e1RM-formule.</li>
+      <li>LeSuer DA, et al. (1997). Accuracy of prediction equations for estimating 1-RM. <i>J Strength Cond Res</i> 11(4):211–213.</li>
+      <li>Grgic J, et al. (2020). Test-Retest Reliability of the 1RM. <i>Sports Med Open</i> 6:31.</li>
+      <li>Schoenfeld BJ, Grgic J, Ogborn D, Krieger JW (2017). Strength &amp; Hypertrophy: Low- vs. High-Load. <i>J Strength Cond Res</i> 31(12):3508–3523 (PMID 28834797).</li>
+      <li>Schoenfeld BJ, Ogborn D, Krieger JW (2017). Dose-response weekly volume &amp; muscle mass. <i>J Sports Sci</i> 35(11):1073–1082 (PMID 27433992).</li>
+      <li>Baz-Valle E, et al. (2021). Total Number of Sets as Volume Quantification. <i>J Strength Cond Res</i> 35(3):870–878.</li>
+      <li>Refalo MC, et al. (2023). Proximity-to-Failure &amp; Hypertrophy. <i>Sports Med</i> 53(3):649–665.</li>
+      <li>Ratamess NA, et al. (2009). ACSM Position Stand: Progression Models in Resistance Training. <i>Med Sci Sports Exerc</i> 41(3):687–708 (PMID 19204579).</li>
+      <li>Helms ER, et al. (2016/2018). RIR-based RPE &amp; RPE vs %1RM loading. <i>Strength Cond J</i> 38(4); <i>Front Physiol</i> 9:247.</li>
+    </ul>
+
+    <p class="sub" style="margin-top:16px">Dit is algemene informatie, geen medisch of persoonlijk trainingsadvies. Volledige audit: <code>SCIENCE-BLUEPRINT.md</code> → <code>verification_report.md</code> in de repository.</p>
+  </div>
 </section>
 
 </div><!-- /app -->
@@ -278,6 +336,6 @@
 
 <script src="vendor/papaparse.min.js"></script>
 <script src="vendor/chart.umd.min.js"></script>
-<script src="app.js?v=3"></script>
+<script src="app.js?v=4"></script>
 </body>
 </html>

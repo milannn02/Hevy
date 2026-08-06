@@ -150,6 +150,29 @@ function computeExTypes(){
 }
 function setKpiLabel(id,text){ const b=document.getElementById(id); const s=b&&b.parentElement.querySelector('span'); if(s) s.textContent=text; }
 
+// Ruis-robuuste trend: lineaire regressie over (tijd, score) i.p.v. een 2-punts vergelijking.
+// (1RM-schattingen hebben ~4% meetruis; een 0,2%-drempel gaf valse plateaus — zie Wetenschap.)
+function trendInfo(points){
+  if(!points || points.length<3) return null;
+  const t0=points[0].t;
+  const xs=points.map(p=>(p.t-t0)/(7*864e5));   // weken sinds eerste punt
+  const ys=points.map(p=>p.v);
+  const n=xs.length;
+  const sx=xs.reduce((a,b)=>a+b,0), sy=ys.reduce((a,b)=>a+b,0);
+  const sxx=xs.reduce((a,x)=>a+x*x,0), sxy=xs.reduce((a,x,i)=>a+x*ys[i],0);
+  const denom=n*sxx-sx*sx; if(denom===0) return null;
+  const slope=(n*sxy-sx*sy)/denom;              // score per week
+  const intercept=(sy-slope*sx)/n;
+  const base = intercept>0 ? intercept : sy/n;
+  const pct = base>0 ? (slope*xs[n-1])/base*100 : 0;   // gemodelleerde verandering over de periode, in %
+  return {slope, pct, n};
+}
+function sessionBests(sets, t){
+  const m=new Map();
+  sets.forEach(r=>{ const v=setScore(r,t); if(v>0){ const k=r.date.getTime(); m.set(k, Math.max(m.get(k)||0, v)); } });
+  return [...m.entries()].sort((a,b)=>a[0]-b[0]).map(([tt,v])=>({t:tt,v}));
+}
+
 /* ---------------- persistentie (IndexedDB) ---------------- */
 const DB_NAME='hevylog', STORE='kv', KEY='dataset';
 function idb(){
@@ -501,14 +524,13 @@ function renderProgressie(){
   document.getElementById('e1RM').textContent  = t==='weight' ? (best? Math.round(best)+' kg':'–') : (total? fmtVolT(total,t):'–');
   document.getElementById('eSets').textContent = work.length;
 
-  const t1=new Date(maxDate); t1.setDate(t1.getDate()-21);
-  const t2=new Date(maxDate); t2.setDate(t2.getDate()-42);
-  const rec=Math.max(0,...sess.filter(s=>s.date>=t1).map(s=>s.score));
-  const prevB=Math.max(0,...sess.filter(s=>s.date>=t2&&s.date<t1).map(s=>s.score));
+  const t6=new Date(maxDate); t6.setDate(t6.getDate()-42);
+  const trPts=sess.filter(s=>s.date>=t6&&s.score>0).map(s=>({t:s.date.getTime(),v:s.score}));
+  const tr=trendInfo(trPts);
   const tEl=document.getElementById('eTrend');
-  if(rec&&prevB){ const d=(rec-prevB)/prevB*100;
+  if(tr){ const d=tr.pct;
     tEl.textContent=(d>=0?'+':'')+d.toFixed(1)+'%';
-    tEl.style.color=d>0.5?'#5FD49B':(d<-0.5?'#FF8C8C':'#F0C75E');
+    tEl.style.color=d>1?'#5FD49B':(d<-1?'#FF8C8C':'#F0C75E');   // brede dode zone i.v.m. meetruis
   } else { tEl.textContent='–'; tEl.style.color=''; }
 
   const labels=sess.map(s=>fmtD(s.date));
@@ -579,7 +601,8 @@ function renderPRs(){
   document.querySelectorAll('#tab-prs th.sortable').forEach(th=>th.classList.toggle('sorted', th.dataset.k===prSort.k));
   document.getElementById('prBody').innerHTML = rows.map(o=>{
     const magLabel = o.magR ? fmtSet(o.magR,o.type) : '–';
-    const scoreLabel = fmtScore(o.score,o.type);
+    const lowConf = o.type==='weight' && o.scoreR && o.scoreR.reps>12;   // e1RM uit >12 reps = minder betrouwbaar
+    const scoreLabel = fmtScore(o.score,o.type) + (lowConf?'<span style="color:var(--plate-yellow);cursor:help" title="Geschat uit meer dan 12 reps — minder betrouwbaar">*</span>':'');
     const extra = (o.type==='weight' && o.scoreR) ? ` <span style="color:var(--muted)">(${fmtSet(o.scoreR,o.type)})</span>` : '';
     return `<tr><td>${o.name}</td><td class="num">${magLabel}</td><td class="num"><b>${scoreLabel}</b>${extra}</td><td>${o.date?fmtD(o.date):'–'}</td><td class="num">${o.sessions}</td><td class="num">${o.sets}</td></tr>`;
   }).join('') || '<tr><td colspan="6" class="empty">Niets gevonden.</td></tr>';
@@ -623,9 +646,9 @@ function renderSpieren(){
     else if(r.muscle==='Schouders'){ isRearDelt(r.exercise_title) ? pull++ : push++; }
   });
   const ratio=pull?push/pull:0;
-  let verdict='Mooi in balans 👌';
-  if(ratio>1.25) verdict='Relatief veel duwwerk — overweeg extra rug-/bicepsvolume.';
-  else if(ratio<0.8) verdict='Relatief veel trekwerk — duwvolume mag iets omhoog.';
+  let verdict='Redelijk in balans. Let op: dit is een vuistregel — er is geen bewijs voor één "juiste" ratio.';
+  if(ratio>1.25) verdict='Relatief veel duwwerk — extra trekvolume kan geen kwaad (veel coaches mikken zelfs op ~2× meer trekken dan duwen).';
+  else if(ratio<0.8) verdict='Relatief veel trekwerk — voor de meeste doelen prima; vul duwen aan naar smaak.';
   const pPct=push+pull?Math.round(push/(push+pull)*100):50;
   document.getElementById('ppBalance').innerHTML=`
     <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
@@ -668,11 +691,10 @@ function renderSuggesties(){
     const isCompound=/(bench|squat|deadlift|\brow\b|press|pull[- ]?up|pulldown|rdl|romanian|hip thrust|lunge|\bdip\b)/i.test(name);
 
     // plateau o.b.v. score van het meettype
-    const t1=new Date(maxDate);t1.setDate(t1.getDate()-21);
-    const t2=new Date(maxDate);t2.setDate(t2.getDate()-42);
-    const m1=Math.max(0,...sets.filter(r=>r.date>=t1).map(r=>setScore(r,t)));
-    const m2=Math.max(0,...sets.filter(r=>r.date>=t2&&r.date<t1).map(r=>setScore(r,t)));
-    const plateau=m1>0&&m2>0&&m1<=m2*1.002;
+    // plateau = vlakke regressie-trend over ~6 weken (min. 4 sessies), i.p.v. brittle 0,2%-drempel
+    const t6=new Date(maxDate);t6.setDate(t6.getDate()-42);
+    const trend=trendInfo(sessionBests(sets.filter(r=>r.date>=t6), t));
+    const plateau=trend && trend.n>=4 && trend.pct<1.5;
 
     let metaStr, targetStr, advice, platesStr='';
     if(t==='weight'){
@@ -819,13 +841,15 @@ function buildPlan(cfg){
   }
   return {split,days,cfg};
 }
-function planTarget(e, week){
+function planTarget(e, week, level){
+  // gevorderd: elke 2 weken ophogen (wekelijkse lineaire progressie is alleen realistisch voor beginners)
+  const steps = level==='adv' ? Math.floor((week-1)/2) : (week-1);
   if(e.t==='reps' || !e.e1){
-    const reps = e.lo + (week-1);
+    const reps = e.lo + steps;
     return {main:`${e.sets} × ${reps}`, sub: e.t==='reps'?'lichaamsgewicht':''};
   }
   const inc = e.kind==='comp' ? 2.5 : 1.25;
-  let w = Math.round((e.e1/(1+e.lo/30)*0.88)/2.5)*2.5 + (week-1)*inc;
+  let w = Math.round((e.e1/(1+e.lo/30)*0.88)/2.5)*2.5 + steps*inc;   // 0,88 = heuristische top-set buffer (~2–3 RIR)
   w = Math.round(w/1.25)*1.25;
   return {main:`${e.sets} × ${e.lo}–${e.hi}`, sub:`≈ ${w.toLocaleString('nl-NL')} kg`};
 }
@@ -843,7 +867,7 @@ function renderPlan(){
   const cards=plan.days.map((d,i)=>{
     const groups=[...new Set(d.exs.map(e=>muscleOf(e.name)))].join(' · ');
     const rows=d.exs.map(e=>{
-      const tg=planTarget(e,planWeek);
+      const tg=planTarget(e,planWeek,plan.cfg.level);
       return `<div class="exrow"><div><span class="nm">${e.name}</span><span class="grp">${muscleOf(e.name)} · ${e.kind==='comp'?'compound':'isolatie'}</span></div>`+
              `<div class="scheme"><b>${tg.main}</b>${tg.sub?`<small>${tg.sub}</small>`:''}</div></div>`;
     }).join('');
@@ -852,13 +876,13 @@ function renderPlan(){
   out.innerHTML=`
     <div class="card">
       <h3>${plan.cfg.weeks}-weken plan · ${SPLIT_LABEL[plan.split]||plan.split}</h3>
-      <p class="sub">${plan.cfg.days} dagen/week · doel: ${goalLabel} · richtgewichten ≈ op basis van je 1RM, elke week iets zwaarder</p>
+      <p class="sub">${plan.cfg.days} dagen/week · ${goalLabel} · ${plan.cfg.level==='adv'?'gevorderd — om de week zwaarder':'beginner — wekelijks zwaarder'} · richtgewichten ≈ heuristisch (jouw 1RM)</p>
       <div class="chips plan-weeks">${weeks}</div>
       <div class="musc-sum">${msum}</div>
     </div>
     <div class="card">
       <h3>Schema — Week ${planWeek}</h3>
-      <p class="sub">Dubbele progressie: haal je de bovenkant van het herhalingsbereik bij alle sets, ga dan omhoog in gewicht (of reps bij lichaamsgewicht).</p>
+      <p class="sub">Dubbele progressie (bovenkant bereik bij alle sets → gewicht/reps omhoog) is een praktische conventie, geen bewezen "beste" methode. Richtgewichten zijn een <b>startpunt</b>: stuur bij op gevoel (±2–3 reps in reserve). Spiergroei werkt over een breed rep-bereik mits dicht bij falen — zie <b>Wetenschap</b>.</p>
       <div class="daygrid">${cards}</div>
     </div>`;
   out.querySelectorAll('.plan-weeks .chip').forEach(c=>c.addEventListener('click',()=>{ planWeek=+c.dataset.w; renderPlan(); }));
@@ -868,6 +892,7 @@ function genPlan(){
     days:+document.getElementById('planDays').value,
     split:document.getElementById('planSplit').value,
     goal:document.getElementById('planGoal').value,
+    level:document.getElementById('planLevel').value,
     weeks:+document.getElementById('planWeeks').value
   });
   planWeek=1; renderPlan();
