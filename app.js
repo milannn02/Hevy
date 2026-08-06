@@ -689,66 +689,68 @@ function renderPRs(){
 }
 
 /* ---------------- SPIERGROEPEN ---------------- */
-const BODY_SVG = `<svg viewBox="0 0 340 330" class="bodyfig" aria-label="Spier-heatmap">
+const BODY_SVG = `<svg viewBox="0 0 340 336" class="bodyfig" aria-label="Spier-heatmap">
 <defs>
-<!-- rechter-helft spiervormen (worden gespiegeld voor links) -->
-<path id="m-delt" d="M14 1 C4 2 -2 10 1 20 C4 27 12 28 18 23 C22 17 21 6 14 1 Z"/>
-<path id="m-pec" d="M1 2 C13 0 25 4 27 15 C28 25 19 30 9 28 C3 22 0 11 1 2 Z"/>
-<path id="m-bi" d="M6 0 C-2 6 -3 24 3 34 C10 33 13 22 11 11 C10 4 9 1 6 0 Z"/>
-<path id="m-tri" d="M5 0 C-3 7 -3 26 4 36 C11 34 12 22 10 11 C9 4 8 1 5 0 Z"/>
-<path id="m-quad" d="M4 0 C-6 12 -8 44 -1 70 C8 69 15 50 15 30 C15 15 11 4 4 0 Z"/>
-<path id="m-ham" d="M4 0 C-5 12 -6 40 0 62 C8 61 14 44 14 26 C14 13 10 3 4 0 Z"/>
-<path id="m-calf" d="M4 0 C-4 8 -5 30 1 46 C8 45 13 30 12 16 C11 7 8 2 4 0 Z"/>
-<path id="m-lat" d="M2 0 C16 3 24 20 22 44 C21 58 12 66 4 62 C-1 44 -1 20 2 0 Z"/>
-<path id="m-glute" d="M2 1 C15 -1 26 6 26 18 C26 28 17 33 8 30 C2 24 0 11 2 1 Z"/>
+<!-- rechter-helft spiervormen (gespiegeld voor links) -->
+<path id="m-delt" d="M11 1 C4 1 -1 7 1 14 C3 21 11 24 17 21 C23 18 24 9 19 3 C17 1 14 1 11 1 Z"/>
+<path id="m-pec" d="M1 1 C12 -1 25 2 27 12 C28 21 22 29 12 28 C6 24 2 15 1 1 Z"/>
+<path id="m-bi" d="M6 1 C11 3 12 13 10 24 C9 31 5 34 3 32 C0 23 0 9 3 2 C4 1 5 0 6 1 Z"/>
+<path id="m-tri" d="M6 1 C11 3 12 14 10 27 C9 34 5 37 3 34 C-1 24 -1 9 3 2 Z"/>
+<path id="m-quad" d="M9 0 C17 3 20 20 19 44 C18 62 12 76 7 76 C2 70 0 44 1 24 C2 10 5 3 9 0 Z"/>
+<path id="m-ham" d="M8 0 C15 3 17 18 16 38 C15 52 10 62 6 62 C1 56 0 34 1 18 C2 8 5 2 8 0 Z"/>
+<path id="m-calf" d="M8 1 C14 6 15 20 11 36 C9 45 6 48 4 45 C-1 32 -1 15 4 4 C5 2 7 0 8 1 Z"/>
+<path id="m-lat" d="M2 0 C16 2 24 14 22 34 C20 50 11 58 3 54 C0 36 -1 16 2 0 Z"/>
+<path id="m-trap" d="M2 0 C11 -2 22 -2 30 0 C27 11 20 21 16 26 C11 21 5 11 2 0 Z"/>
+<path id="m-glute" d="M2 2 C13 -2 26 3 26 15 C26 26 16 32 8 28 C1 21 -1 11 2 2 Z"/>
 <!-- neutrale delen -->
-<path id="n-arm" d="M6 0 C16 1 20 10 18 22 C16 40 12 62 9 80 C8 88 13 92 11 98 C6 101 1 96 1 88 C2 62 0 30 0 12 C0 4 2 0 6 0 Z"/>
-<path id="n-leg" d="M8 0 C18 0 23 6 22 16 C21 60 16 108 12 150 C11 160 14 166 10 170 C4 172 2 164 2 152 C2 108 0 60 0 14 C0 5 3 0 8 0 Z"/>
+<path id="n-arm" d="M7 0 C17 1 21 9 19 22 C17 44 13 70 10 92 C9 100 13 105 10 110 C4 112 0 107 1 98 C2 70 -1 34 1 14 C1 5 3 0 7 0 Z"/>
+<path id="n-leg" d="M9 0 C20 0 25 7 23 18 C22 64 17 112 12 156 C11 166 15 172 10 176 C3 178 1 170 2 158 C2 112 -1 62 1 16 C1 6 4 0 9 0 Z"/>
+<path id="n-torso" d="M63 52 C74 46 96 46 107 52 C114 66 110 100 106 124 C104 138 96 146 85 146 C74 146 66 138 64 124 C60 100 56 66 63 52 Z"/>
 </defs>
-<g class="fig" transform="translate(0,0)">
- <!-- voorkant -->
- <ellipse cx="85" cy="24" rx="15" ry="18" class="body"/>
- <path d="M78 40 h14 v10 q-7 5 -14 0 Z" class="body"/>
- <use href="#n-arm" transform="translate(108,54)" class="body"/>
- <use href="#n-arm" transform="matrix(-1 0 0 1 62 54)" class="body"/>
- <use href="#n-leg" transform="translate(88,150)" class="body"/>
- <use href="#n-leg" transform="matrix(-1 0 0 1 82 150)" class="body"/>
- <path d="M63 55 q22 -7 44 0 q6 30 -4 78 q-18 8 -36 0 q-10 -48 -4 -78 Z" class="body"/>
+<g class="fig">
+ <!-- VOORKANT -->
+ <ellipse cx="85" cy="22" rx="13" ry="16" class="body"/>
+ <path d="M79 33 h12 v10 q-6 4 -12 0 Z" class="body"/>
+ <use href="#n-torso" class="body"/>
+ <use href="#n-arm" transform="translate(106,52)" class="body"/>
+ <use href="#n-arm" transform="matrix(-1 0 0 1 64 52)" class="body"/>
+ <use href="#n-leg" transform="translate(87,150)" class="body"/>
+ <use href="#n-leg" transform="matrix(-1 0 0 1 83 150)" class="body"/>
  <use href="#m-delt" transform="translate(96,50)" class="mh" data-m="Schouders"/>
  <use href="#m-delt" transform="matrix(-1 0 0 1 74 50)" class="mh" data-m="Schouders"/>
  <use href="#m-pec" transform="translate(85,58)" class="mh" data-m="Borst"/>
  <use href="#m-pec" transform="matrix(-1 0 0 1 85 58)" class="mh" data-m="Borst"/>
- <use href="#m-bi" transform="translate(105,74)" class="mh" data-m="Biceps"/>
- <use href="#m-bi" transform="matrix(-1 0 0 1 65 74)" class="mh" data-m="Biceps"/>
- <rect x="73" y="92" width="24" height="52" rx="8" class="mh" data-m="Core"/>
- <line x1="85" y1="94" x2="85" y2="142" class="seam"/><line x1="74" y1="108" x2="96" y2="108" class="seam"/><line x1="74" y1="122" x2="96" y2="122" class="seam"/>
- <use href="#m-quad" transform="translate(87,152)" class="mh" data-m="Quads"/>
- <use href="#m-quad" transform="matrix(-1 0 0 1 83 152)" class="mh" data-m="Quads"/>
- <text x="85" y="322" text-anchor="middle" class="figlabel">Voorkant</text>
+ <use href="#m-bi" transform="translate(105,73)" class="mh" data-m="Biceps"/>
+ <use href="#m-bi" transform="matrix(-1 0 0 1 65 73)" class="mh" data-m="Biceps"/>
+ <rect x="74" y="92" width="22" height="42" rx="7" class="mh" data-m="Core"/>
+ <path d="M85 94 V132 M74 105 H96 M74 118 H96" class="seam" fill="none"/>
+ <use href="#m-quad" transform="translate(87,150)" class="mh" data-m="Quads"/>
+ <use href="#m-quad" transform="matrix(-1 0 0 1 83 150)" class="mh" data-m="Quads"/>
+ <text x="85" y="330" text-anchor="middle" class="figlabel">Voorkant</text>
 </g>
 <g class="fig" transform="translate(170,0)">
- <!-- achterkant -->
- <ellipse cx="85" cy="24" rx="15" ry="18" class="body"/>
- <path d="M78 40 h14 v10 q-7 5 -14 0 Z" class="body"/>
- <use href="#n-arm" transform="translate(108,54)" class="body"/>
- <use href="#n-arm" transform="matrix(-1 0 0 1 62 54)" class="body"/>
- <use href="#n-leg" transform="translate(88,150)" class="body"/>
- <use href="#n-leg" transform="matrix(-1 0 0 1 82 150)" class="body"/>
- <path d="M63 55 q22 -7 44 0 q6 30 -4 78 q-18 8 -36 0 q-10 -48 -4 -78 Z" class="body"/>
+ <!-- ACHTERKANT -->
+ <ellipse cx="85" cy="22" rx="13" ry="16" class="body"/>
+ <path d="M79 33 h12 v10 q-6 4 -12 0 Z" class="body"/>
+ <use href="#n-torso" class="body"/>
+ <use href="#n-arm" transform="translate(106,52)" class="body"/>
+ <use href="#n-arm" transform="matrix(-1 0 0 1 64 52)" class="body"/>
+ <use href="#n-leg" transform="translate(87,150)" class="body"/>
+ <use href="#n-leg" transform="matrix(-1 0 0 1 83 150)" class="body"/>
  <use href="#m-delt" transform="translate(96,50)" class="mh" data-m="Schouders"/>
  <use href="#m-delt" transform="matrix(-1 0 0 1 74 50)" class="mh" data-m="Schouders"/>
- <path d="M72 56 q13 -5 26 0 q3 12 0 22 q-13 4 -26 0 q-3 -10 0 -22 Z" class="mh" data-m="Rug"/>
- <use href="#m-lat" transform="translate(85,78)" class="mh" data-m="Rug"/>
- <use href="#m-lat" transform="matrix(-1 0 0 1 85 78)" class="mh" data-m="Rug"/>
- <use href="#m-tri" transform="translate(105,74)" class="mh" data-m="Triceps"/>
- <use href="#m-tri" transform="matrix(-1 0 0 1 65 74)" class="mh" data-m="Triceps"/>
- <use href="#m-glute" transform="translate(85,138)" class="mh" data-m="Hamstrings/Glutes"/>
- <use href="#m-glute" transform="matrix(-1 0 0 1 85 138)" class="mh" data-m="Hamstrings/Glutes"/>
- <use href="#m-ham" transform="translate(87,170)" class="mh" data-m="Hamstrings/Glutes"/>
- <use href="#m-ham" transform="matrix(-1 0 0 1 83 170)" class="mh" data-m="Hamstrings/Glutes"/>
- <use href="#m-calf" transform="translate(88,236)" class="mh" data-m="Kuiten"/>
- <use href="#m-calf" transform="matrix(-1 0 0 1 82 236)" class="mh" data-m="Kuiten"/>
- <text x="85" y="322" text-anchor="middle" class="figlabel">Achterkant</text>
+ <use href="#m-trap" transform="translate(70,54)" class="mh" data-m="Rug"/>
+ <use href="#m-lat" transform="translate(85,80)" class="mh" data-m="Rug"/>
+ <use href="#m-lat" transform="matrix(-1 0 0 1 85 80)" class="mh" data-m="Rug"/>
+ <use href="#m-tri" transform="translate(105,73)" class="mh" data-m="Triceps"/>
+ <use href="#m-tri" transform="matrix(-1 0 0 1 65 73)" class="mh" data-m="Triceps"/>
+ <use href="#m-glute" transform="translate(85,132)" class="mh" data-m="Hamstrings/Glutes"/>
+ <use href="#m-glute" transform="matrix(-1 0 0 1 85 132)" class="mh" data-m="Hamstrings/Glutes"/>
+ <use href="#m-ham" transform="translate(87,162)" class="mh" data-m="Hamstrings/Glutes"/>
+ <use href="#m-ham" transform="matrix(-1 0 0 1 83 162)" class="mh" data-m="Hamstrings/Glutes"/>
+ <use href="#m-calf" transform="translate(88,230)" class="mh" data-m="Kuiten"/>
+ <use href="#m-calf" transform="matrix(-1 0 0 1 82 230)" class="mh" data-m="Kuiten"/>
+ <text x="85" y="330" text-anchor="middle" class="figlabel">Achterkant</text>
 </g>
 </svg>`;
 function renderSpieren(){
