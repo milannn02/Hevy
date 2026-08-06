@@ -726,6 +726,8 @@ const BODY_SVG = `<svg viewBox="0 0 340 336" class="bodyfig" aria-label="Spier-h
  <path d="M85 94 V132 M74 105 H96 M74 118 H96" class="seam" fill="none"/>
  <use href="#m-quad" transform="translate(87,150)" class="mh" data-m="Quads"/>
  <use href="#m-quad" transform="matrix(-1 0 0 1 83 150)" class="mh" data-m="Quads"/>
+ <path class="seam" fill="none" d="M85 60 V90 M77 73 q8 4 16 0 M77 82 q8 4 16 0"/>
+ <path class="seam" fill="none" d="M97 158 V214 M73 158 V214"/>
  <text x="85" y="330" text-anchor="middle" class="figlabel">Voorkant</text>
 </g>
 <g class="fig" transform="translate(170,0)">
@@ -750,6 +752,7 @@ const BODY_SVG = `<svg viewBox="0 0 340 336" class="bodyfig" aria-label="Spier-h
  <use href="#m-ham" transform="matrix(-1 0 0 1 83 162)" class="mh" data-m="Hamstrings/Glutes"/>
  <use href="#m-calf" transform="translate(88,230)" class="mh" data-m="Kuiten"/>
  <use href="#m-calf" transform="matrix(-1 0 0 1 82 230)" class="mh" data-m="Kuiten"/>
+ <path class="seam" fill="none" d="M85 55 V116 M96 236 V272 M74 236 V272"/>
  <text x="85" y="330" text-anchor="middle" class="figlabel">Achterkant</text>
 </g>
 </svg>`;
