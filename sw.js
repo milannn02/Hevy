@@ -1,10 +1,10 @@
 /* Trainingslogboek service worker — offline-first app-shell (stale-while-revalidate) */
-const CACHE = 'hevylog-v5';
+const CACHE = 'hevylog-v7';
 const ASSETS = [
   './',
   'index.html',
-  'styles.css?v=4',
-  'app.js?v=4',
+  'styles.css?v=6',
+  'app.js?v=6',
   'manifest.webmanifest',
   'vendor/papaparse.min.js',
   'vendor/chart.umd.min.js',
@@ -37,21 +37,31 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET') return;
+
+  // Paginanavigatie: NETWERK EERST → altijd verse HTML wanneer online, val offline terug op cache.
+  // (Voorkomt dat een gedeployde update onzichtbaar blijft door een oude gecachte pagina.)
+  if (req.mode === 'navigate') {
+    e.respondWith(
+      fetch(req).then(res => {
+        const copy = res.clone();
+        caches.open(CACHE).then(c => c.put('index.html', copy)).catch(() => {});
+        return res;
+      }).catch(() => caches.match(req).then(r => r || caches.match('index.html')))
+    );
+    return;
+  }
+
+  // Overige GET (css/js/vendor/icons/fonts): stale-while-revalidate.
   e.respondWith((async () => {
     const cache = await caches.open(CACHE);
-    let cached = await cache.match(req);
-    if (!cached && req.mode === 'navigate') cached = await cache.match('index.html');
-
+    const cached = await cache.match(req);
     const fromNet = fetch(req).then(res => {
-      // cache geslaagde én opaque (Google Fonts) responses voor offline gebruik
       if (res && (res.ok || res.type === 'opaque')) cache.put(req, res.clone()).catch(() => {});
       return res;
     }).catch(() => null);
-
-    if (cached) { e.waitUntil(fromNet); return cached; }          // direct serveren, op achtergrond verversen
+    if (cached) { e.waitUntil(fromNet); return cached; }
     const net = await fromNet;
     if (net) return net;
-    if (req.mode === 'navigate') { const idx = await cache.match('index.html'); if (idx) return idx; }
     return new Response('Offline', { status: 503, statusText: 'Offline' });
   })());
 });

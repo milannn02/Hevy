@@ -11,6 +11,7 @@ let prSort = {k:'e1rm', dir:-1};
 let exTypes = new Map();   // exercise_title -> 'weight' | 'reps' | 'time' | 'dist'
 let plan = null;           // gegenereerd trainingsplan
 let planWeek = 1;
+let muscleMode = 'all';    // 'all' | 'hard' (RPE≥7) voor de spiergroep-weergaven
 const charts = {};
 
 const PLATE = {red:'#E03B3B', blue:'#2D6FD2', yellow:'#F0B429', green:'#2FA36B', white:'#D8DDE6', grey:'#5A6170'};
@@ -36,7 +37,7 @@ function parseDate(s){ // "25 May 2026, 10:53"
   if(!m) { const d = new Date(s); return isNaN(d)?null:d; }
   return new Date(+m[3], MONTHS[m[2]] ?? 0, +m[1], +m[4], +m[5]);
 }
-const fmtD = d => d.toLocaleDateString('nl-NL',{day:'numeric',month:'short',year:'2-digit'});
+const fmtD = d => d.toLocaleDateString('nl-NL',{day:'numeric',month:'short',year:'numeric'});
 const fmtKg = n => n>=10000 ? (n/1000).toLocaleString('nl-NL',{maximumFractionDigits:1})+'k kg' : Math.round(n).toLocaleString('nl-NL')+' kg';
 const e1rm = (w,r) => r>1 ? w*(1+r/30) : w;
 function weekStart(d){ const t=new Date(d); t.setHours(0,0,0,0); t.setDate(t.getDate()-(t.getDay()+6)%7); return t; }
@@ -63,6 +64,54 @@ function muscleOf(name){
 }
 const PUSH = new Set(['Borst','Triceps']); const PULL = new Set(['Rug','Biceps']);
 const isRearDelt = name => /(rear delt|reverse fly|face pull|\brear\b|pull ?apart|pullapart)/i.test(name);
+
+// C16 — secundaire spieren: een set telt vol mee voor de primaire spier en half (0,5) voor betrokken hulpspieren
+const SECONDARY = [
+  [/(bench|chest press|incline press|floor press|push ?up|crossover|\bfly\b|\bpec\b)/, ['Triceps','Schouders']],
+  [/\bdip\b/, ['Borst','Triceps']],
+  [/(overhead press|shoulder press|military|arnold|lateral raise|front raise|upright)/, ['Triceps']],
+  [/(\brow\b|pulldown|pull ?up|chin ?up|\blat )/, ['Biceps']],
+  [/(deadlift|romanian|\brdl\b|good morning|back extension|hyperextension)/, ['Rug','Hamstrings/Glutes']],
+  [/(squat|leg press|lunge|\bhack\b|split squat|step up)/, ['Hamstrings/Glutes']],
+  [/(hip thrust|glute)/, ['Hamstrings/Glutes']]
+];
+function muscleContribs(name){
+  const prim = muscleOf(name);
+  const out = [{m:prim, w:1}];
+  if(prim==='Cardio' || prim==='Overig') return out;
+  const n = ' ' + String(name).toLowerCase() + ' ';
+  SECONDARY.forEach(([rx,ms])=>{ if(rx.test(n)) ms.forEach(m=>{ if(m!==prim && !out.some(o=>o.m===m)) out.push({m, w:0.5}); }); });
+  return out;
+}
+// C5/C13 — "harde set": dicht bij falen (RPE≥7) of failure/dropset
+const isHardSet = r => isWork(r) && r.reps>0 && (r.rpe>=7 || r.set_type==='failure' || r.set_type==='dropset');
+// heatmap-kleur: licht (weinig) → donkerblauw (veel)
+function heatColor(x){
+  x = Math.max(0, Math.min(1, x||0));
+  const lo=[176,199,232], hi=[16,52,104];
+  const c = lo.map((v,i)=>Math.round(v + (hi[i]-v)*x));
+  return `rgb(${c[0]},${c[1]},${c[2]})`;
+}
+// gewogen werksets per spiergroep over een rij-lijst (secundair telt 0,5 mee)
+function muscleSetCounts(rows){
+  const m = new Map();
+  rows.forEach(r=>muscleContribs(r.exercise_title).forEach(c=>{
+    if(c.m==='Cardio'||c.m==='Overig') return;
+    m.set(c.m, (m.get(c.m)||0)+c.w);
+  }));
+  return m;
+}
+// C11 — DOTS: lichaamsgewicht-eerlijke krachtscore (verving Wilks in 2019)
+const DOTS_C = {
+  m:[-307.75076, 24.0900756, -0.1918759221, 0.0007391293, -0.000001093],
+  f:[-57.96288, 13.6175032, -0.1126655495, 0.0005158568, -0.0000010706]
+};
+function dotsCoef(bw, sex){
+  const c = DOTS_C[sex] || DOTS_C.m;
+  const x = Math.max(40, Math.min(sex==='f'?150:210, bw));
+  const d = c[0] + c[1]*x + c[2]*x*x + c[3]*x*x*x + c[4]*x*x*x*x;
+  return d ? 500/d : 0;
+}
 
 /* ---------------- metriek-model (gewicht / reps / tijd / afstand) ---------------- */
 function fmtDur(sec){
@@ -211,6 +260,20 @@ document.getElementById('demoBtn2').addEventListener('click', loadDemo);
 document.getElementById('clearBtn').addEventListener('click', ()=>{
   if(window.confirm('Weet je zeker dat je de geladen data wilt wissen? Je kunt je CSV-bestand daarna opnieuw inladen.')) clearAll();
 });
+document.getElementById('dataToggle').addEventListener('click', ()=>{
+  const acts=document.getElementById('dataActs');
+  const open=acts.hasAttribute('hidden');           // momenteel ingeklapt → openen
+  acts.toggleAttribute('hidden', !open);
+  document.getElementById('dataToggle').setAttribute('aria-expanded', open?'true':'false');
+});
+// wetenschappelijke onderbouwing: inklapbaar onderaan de pagina
+const sciToggleBtn=document.getElementById('sciToggle');
+if(sciToggleBtn) sciToggleBtn.addEventListener('click', ()=>{
+  const sec=document.getElementById('tab-wetenschap');
+  const open=sec.hasAttribute('hidden');
+  sec.toggleAttribute('hidden', !open);
+  if(open) requestAnimationFrame(()=>sec.scrollIntoView({behavior:'smooth', block:'start'}));
+});
 fileInput.addEventListener('change', e => e.target.files[0] && loadFile(e.target.files[0]));
 
 ['dragover','dragenter'].forEach(ev=>hero.addEventListener(ev,e=>{e.preventDefault();hero.classList.add('drag')}));
@@ -243,6 +306,7 @@ function ingest(text, name, {persist=true, demo=false}={}){
     reps: typeof r.reps === 'number' ? r.reps : (parseInt(r.reps)||0),
     dur: typeof r.duration_seconds === 'number' ? r.duration_seconds : (parseFloat(r.duration_seconds)||0),
     dist: typeof r.distance_km === 'number' ? r.distance_km : (parseFloat(r.distance_km)||0),
+    rpe: typeof r.rpe === 'number' ? r.rpe : (parseFloat(r.rpe)||0),
     muscle: muscleOf(r.exercise_title)
   })).filter(r => r.date);
   if(!raw.length){ document.getElementById('fileMeta').textContent = 'Geen bruikbare sets met datum gevonden.'; toast('Geen bruikbare sets gevonden'); return false; }
@@ -272,6 +336,8 @@ function showLoaded(){
   appEl.style.display='block';
   periodsEl.style.display='flex';
   dataBar.style.display='flex';
+  document.getElementById('dataActs').setAttribute('hidden','');   // standaard ingeklapt zodra data geladen is
+  document.getElementById('dataToggle').setAttribute('aria-expanded','false');
   document.getElementById('dbName').textContent = currentMeta.name + (currentMeta.demo ? '  ·  voorbeeld' : '');
   const range = sessions.length ? `${fmtD(sessions[0].date)} – ${fmtD(maxDate)}` : '';
   document.getElementById('dbMeta').textContent = `${sessions.length} workouts · ${raw.length.toLocaleString('nl-NL')} sets · ${range}`;
@@ -298,9 +364,11 @@ function buildSessions(){
 function periodStart(){
   if(period==='all') return new Date(0);
   const d = new Date(maxDate);
+  if(period==='1m') d.setMonth(d.getMonth()-1);
   if(period==='3m') d.setMonth(d.getMonth()-3);
   if(period==='6m') d.setMonth(d.getMonth()-6);
   if(period==='1y') d.setFullYear(d.getFullYear()-1);
+  if(period==='2y') d.setFullYear(d.getFullYear()-2);
   return d;
 }
 const fRaw = () => raw.filter(r => r.date >= periodStart());
@@ -352,21 +420,30 @@ window.addEventListener('popstate', ()=>{
 // logo = terug naar boven
 const brandEl=document.querySelector('header .brand');
 if(brandEl){ brandEl.style.cursor='pointer'; brandEl.title='Naar boven'; brandEl.addEventListener('click', ()=>window.scrollTo({top:0, behavior:'smooth'})); }
+// spiergroep-modus: alle werksets vs. harde sets
+document.querySelectorAll('#muscleModeChips .chip').forEach(c=>c.addEventListener('click', ()=>{
+  muscleMode = c.dataset.mode;
+  document.querySelectorAll('#muscleModeChips .chip').forEach(x=>x.classList.toggle('active', x===c));
+  renderSpieren();
+}));
 
 /* ---------------- init na laden ---------------- */
 function initAfterLoad(){
-  const counts = new Map();
-  raw.forEach(r => counts.set(r.exercise_title, (counts.get(r.exercise_title)||0)+1));
-  const sorted = [...counts.entries()].sort((a,b)=>b[1]-a[1]);
+  const counts = new Map(), lastUsed = new Map();
+  raw.forEach(r => {
+    counts.set(r.exercise_title, (counts.get(r.exercise_title)||0)+1);
+    const t=r.date.getTime(); if(t > (lastUsed.get(r.exercise_title)||0)) lastUsed.set(r.exercise_title, t);
+  });
+  const recent = [...lastUsed.entries()].sort((a,b)=>b[1]-a[1]).map(e=>e[0]);   // laatst gebruikte eerst
   const dl = document.getElementById('exList'); dl.innerHTML='';
   [...counts.keys()].sort().forEach(n=>{ const o=document.createElement('option'); o.value=n; dl.appendChild(o); });
   const chips = document.getElementById('exChips'); chips.innerHTML='';
-  sorted.slice(0,8).forEach(([n])=>{
+  recent.slice(0,8).forEach(n=>{
     const c=document.createElement('button'); c.className='chip'; c.textContent=n;
     c.addEventListener('click',()=>{ currentEx=n; document.getElementById('exInput').value=n; renderProgressie(); markChip(); });
     chips.appendChild(c);
   });
-  currentEx = sorted.find(([n])=>/bench press \(barbell\)/i.test(n))?.[0] || sorted[0][0];
+  currentEx = recent[0] || [...counts.keys()][0] || '';
   document.getElementById('exInput').value = currentEx;
   markChip();
   renderAll();
@@ -386,6 +463,7 @@ document.getElementById('exInput').addEventListener('change', e=>{
 });
 document.getElementById('prSearch').addEventListener('input', renderPRs);
 document.getElementById('bwInput').addEventListener('input', renderBenchmark);
+document.getElementById('ageInput').addEventListener('input', renderBenchmark);
 document.getElementById('sexInput').addEventListener('change', renderBenchmark);
 document.querySelectorAll('#tab-prs th.sortable').forEach(th=>{
   th.addEventListener('click', ()=>{
@@ -448,8 +526,10 @@ function renderOverzicht(){
     }
   }
   const thin = labels.length>40;
+  const maxFreq = Math.max(0,...freq);
+  const freqYmax = maxFreq>=7 ? maxFreq : Math.min(maxFreq+1, 7);   // altijd +1 boven de hoogste staaf, max 7
   makeChart('chFreq',{type:'bar',data:{labels,datasets:[{data:freq,backgroundColor:PLATE.blue,borderRadius:3}]},
-    options:{maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{...gridOpts,ticks:{maxRotation:0,autoSkip:true,maxTicksLimit:thin?10:20}},y:{...gridOpts,beginAtZero:true,ticks:{stepSize:1}}}}});
+    options:{maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{...gridOpts,ticks:{maxRotation:0,autoSkip:true,maxTicksLimit:thin?10:20}},y:{...gridOpts,beginAtZero:true,max:freqYmax,ticks:{stepSize:1}}}}});
   makeChart('chWeekVol',{type:'line',data:{labels,datasets:[{data:wvol,borderColor:PLATE.yellow,backgroundColor:'rgba(240,180,41,.12)',fill:true,pointRadius:0,tension:.3,borderWidth:2}]},
     options:{maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{...gridOpts,ticks:{autoSkip:true,maxTicksLimit:thin?10:20}},y:{...gridOpts,beginAtZero:true}}}});
 
@@ -609,33 +689,114 @@ function renderPRs(){
 }
 
 /* ---------------- SPIERGROEPEN ---------------- */
+const BODY_SVG = `<svg viewBox="0 0 340 330" class="bodyfig" aria-label="Spier-heatmap">
+<defs>
+<!-- rechter-helft spiervormen (worden gespiegeld voor links) -->
+<path id="m-delt" d="M14 1 C4 2 -2 10 1 20 C4 27 12 28 18 23 C22 17 21 6 14 1 Z"/>
+<path id="m-pec" d="M1 2 C13 0 25 4 27 15 C28 25 19 30 9 28 C3 22 0 11 1 2 Z"/>
+<path id="m-bi" d="M6 0 C-2 6 -3 24 3 34 C10 33 13 22 11 11 C10 4 9 1 6 0 Z"/>
+<path id="m-tri" d="M5 0 C-3 7 -3 26 4 36 C11 34 12 22 10 11 C9 4 8 1 5 0 Z"/>
+<path id="m-quad" d="M4 0 C-6 12 -8 44 -1 70 C8 69 15 50 15 30 C15 15 11 4 4 0 Z"/>
+<path id="m-ham" d="M4 0 C-5 12 -6 40 0 62 C8 61 14 44 14 26 C14 13 10 3 4 0 Z"/>
+<path id="m-calf" d="M4 0 C-4 8 -5 30 1 46 C8 45 13 30 12 16 C11 7 8 2 4 0 Z"/>
+<path id="m-lat" d="M2 0 C16 3 24 20 22 44 C21 58 12 66 4 62 C-1 44 -1 20 2 0 Z"/>
+<path id="m-glute" d="M2 1 C15 -1 26 6 26 18 C26 28 17 33 8 30 C2 24 0 11 2 1 Z"/>
+<!-- neutrale delen -->
+<path id="n-arm" d="M6 0 C16 1 20 10 18 22 C16 40 12 62 9 80 C8 88 13 92 11 98 C6 101 1 96 1 88 C2 62 0 30 0 12 C0 4 2 0 6 0 Z"/>
+<path id="n-leg" d="M8 0 C18 0 23 6 22 16 C21 60 16 108 12 150 C11 160 14 166 10 170 C4 172 2 164 2 152 C2 108 0 60 0 14 C0 5 3 0 8 0 Z"/>
+</defs>
+<g class="fig" transform="translate(0,0)">
+ <!-- voorkant -->
+ <ellipse cx="85" cy="24" rx="15" ry="18" class="body"/>
+ <path d="M78 40 h14 v10 q-7 5 -14 0 Z" class="body"/>
+ <use href="#n-arm" transform="translate(108,54)" class="body"/>
+ <use href="#n-arm" transform="matrix(-1 0 0 1 62 54)" class="body"/>
+ <use href="#n-leg" transform="translate(88,150)" class="body"/>
+ <use href="#n-leg" transform="matrix(-1 0 0 1 82 150)" class="body"/>
+ <path d="M63 55 q22 -7 44 0 q6 30 -4 78 q-18 8 -36 0 q-10 -48 -4 -78 Z" class="body"/>
+ <use href="#m-delt" transform="translate(96,50)" class="mh" data-m="Schouders"/>
+ <use href="#m-delt" transform="matrix(-1 0 0 1 74 50)" class="mh" data-m="Schouders"/>
+ <use href="#m-pec" transform="translate(85,58)" class="mh" data-m="Borst"/>
+ <use href="#m-pec" transform="matrix(-1 0 0 1 85 58)" class="mh" data-m="Borst"/>
+ <use href="#m-bi" transform="translate(105,74)" class="mh" data-m="Biceps"/>
+ <use href="#m-bi" transform="matrix(-1 0 0 1 65 74)" class="mh" data-m="Biceps"/>
+ <rect x="73" y="92" width="24" height="52" rx="8" class="mh" data-m="Core"/>
+ <line x1="85" y1="94" x2="85" y2="142" class="seam"/><line x1="74" y1="108" x2="96" y2="108" class="seam"/><line x1="74" y1="122" x2="96" y2="122" class="seam"/>
+ <use href="#m-quad" transform="translate(87,152)" class="mh" data-m="Quads"/>
+ <use href="#m-quad" transform="matrix(-1 0 0 1 83 152)" class="mh" data-m="Quads"/>
+ <text x="85" y="322" text-anchor="middle" class="figlabel">Voorkant</text>
+</g>
+<g class="fig" transform="translate(170,0)">
+ <!-- achterkant -->
+ <ellipse cx="85" cy="24" rx="15" ry="18" class="body"/>
+ <path d="M78 40 h14 v10 q-7 5 -14 0 Z" class="body"/>
+ <use href="#n-arm" transform="translate(108,54)" class="body"/>
+ <use href="#n-arm" transform="matrix(-1 0 0 1 62 54)" class="body"/>
+ <use href="#n-leg" transform="translate(88,150)" class="body"/>
+ <use href="#n-leg" transform="matrix(-1 0 0 1 82 150)" class="body"/>
+ <path d="M63 55 q22 -7 44 0 q6 30 -4 78 q-18 8 -36 0 q-10 -48 -4 -78 Z" class="body"/>
+ <use href="#m-delt" transform="translate(96,50)" class="mh" data-m="Schouders"/>
+ <use href="#m-delt" transform="matrix(-1 0 0 1 74 50)" class="mh" data-m="Schouders"/>
+ <path d="M72 56 q13 -5 26 0 q3 12 0 22 q-13 4 -26 0 q-3 -10 0 -22 Z" class="mh" data-m="Rug"/>
+ <use href="#m-lat" transform="translate(85,78)" class="mh" data-m="Rug"/>
+ <use href="#m-lat" transform="matrix(-1 0 0 1 85 78)" class="mh" data-m="Rug"/>
+ <use href="#m-tri" transform="translate(105,74)" class="mh" data-m="Triceps"/>
+ <use href="#m-tri" transform="matrix(-1 0 0 1 65 74)" class="mh" data-m="Triceps"/>
+ <use href="#m-glute" transform="translate(85,138)" class="mh" data-m="Hamstrings/Glutes"/>
+ <use href="#m-glute" transform="matrix(-1 0 0 1 85 138)" class="mh" data-m="Hamstrings/Glutes"/>
+ <use href="#m-ham" transform="translate(87,170)" class="mh" data-m="Hamstrings/Glutes"/>
+ <use href="#m-ham" transform="matrix(-1 0 0 1 83 170)" class="mh" data-m="Hamstrings/Glutes"/>
+ <use href="#m-calf" transform="translate(88,236)" class="mh" data-m="Kuiten"/>
+ <use href="#m-calf" transform="matrix(-1 0 0 1 82 236)" class="mh" data-m="Kuiten"/>
+ <text x="85" y="322" text-anchor="middle" class="figlabel">Achterkant</text>
+</g>
+</svg>`;
 function renderSpieren(){
-  const R=fRaw().filter(r=>isWork(r)&&r.reps>0);
+  const useHard = muscleMode==='hard';
+  const ok = r => isWork(r) && r.reps>0 && (!useHard || isHardSet(r));
+  const R = fRaw().filter(ok);
+  const workAll = fRaw().filter(r=>isWork(r)&&r.reps>0);
+  const rpeShare = workAll.length ? workAll.filter(r=>r.rpe>0).length/workAll.length : 0;
 
-  // laatste 8 weken stacked
+  // ---- lichaam-heatmap (periode, secundaire spieren tellen 0,5 mee) ----
+  const totals = muscleSetCounts(R);
+  const maxT = Math.max(1, ...totals.values());
+  const heat = document.getElementById('bodyHeat');
+  heat.innerHTML = BODY_SVG
+    + `<div class="heatleg"><span>weinig</span><span class="bar"></span><span>veel</span></div>`
+    + `<div class="mtotals">${[...totals.entries()].filter(([m])=>m!=='Cardio'&&m!=='Overig').sort((a,b)=>b[1]-a[1]).map(([m,v])=>`<span>${m} <b>${Math.round(v)}</b></span>`).join('')||'<span>Geen sets</span>'}</div>`;
+  heat.querySelectorAll('.mh').forEach(el=>{
+    const m=el.getAttribute('data-m'), v=totals.get(m)||0;
+    el.style.fill=heatColor(v/maxT);
+    el.setAttribute('title', `${m}: ${Math.round(v)} sets`);
+  });
+
+  // ---- weekraster (laatste 8 weken × spiergroep) ----
   const wkKeys=[];
   for(let i=7;i>=0;i--){ const d=new Date(weekStart(maxDate)); d.setDate(d.getDate()-7*i); wkKeys.push(d.getTime()); }
-  const groups=Object.keys(MUSCLE_COLORS).filter(g=>g!=='Overig'&&g!=='Cardio');
-  const data={}; groups.forEach(g=>data[g]=wkKeys.map(()=>0));
-  raw.forEach(r=>{
-    if(!isWork(r)||!(r.reps>0))return;
-    const k=weekStart(r.date).getTime();
-    const idx=wkKeys.indexOf(k);
-    if(idx<0||!data[r.muscle])return;
-    data[r.muscle][idx]++;
+  const order=Object.keys(MUSCLE_COLORS).filter(g=>g!=='Overig'&&g!=='Cardio');
+  const cellMap={}; order.forEach(g=>cellMap[g]=wkKeys.map(()=>0));
+  raw.filter(ok).forEach(r=>{
+    const idx=wkKeys.indexOf(weekStart(r.date).getTime()); if(idx<0) return;
+    muscleContribs(r.exercise_title).forEach(c=>{ if(cellMap[c.m]) cellMap[c.m][idx]+=c.w; });
   });
-  makeChart('chMuscleWeek',{type:'bar',
-    data:{labels:wkKeys.map(t=>new Date(t).toLocaleDateString('nl-NL',{day:'numeric',month:'short'})),
-      datasets:groups.map(g=>({label:g,data:data[g],backgroundColor:MUSCLE_COLORS[g],borderRadius:2}))},
-    options:{maintainAspectRatio:false,scales:{x:{...gridOpts,stacked:true},y:{...gridOpts,stacked:true,beginAtZero:true}},
-      plugins:{legend:{labels:{boxWidth:14,font:{family:"'Archivo'",size:11.5}}}}}});
+  const present=order.filter(g=>cellMap[g].some(v=>v>0));
+  const maxCell=Math.max(1, ...present.flatMap(g=>cellMap[g]));
+  const colHead=wkKeys.map(t=>`<div class="h">${new Date(t).toLocaleDateString('nl-NL',{day:'numeric',month:'short'})}</div>`).join('');
+  const bodyRows=present.map(g=>{
+    const cells=cellMap[g].map(v=>{ const n=Math.round(v);
+      return `<div class="cell${v?'':' z'}" style="background:${v?heatColor(v/maxCell):'#20242C'}" title="${g}: ${n} sets">${n||''}</div>`; }).join('');
+    return `<div class="lbl"><span class="dot" style="background:${MUSCLE_COLORS[g]}"></span>${g}</div>${cells}`;
+  }).join('');
+  document.getElementById('muscleWeekGrid').innerHTML = present.length
+    ? `<div class="mgrid" style="grid-template-columns:minmax(96px,auto) repeat(${wkKeys.length},minmax(30px,1fr))"><div class="lbl"></div>${colHead}${bodyRows}</div>`
+      + (useHard&&rpeShare<0.5?`<p class="sub" style="margin:10px 0 0">Let op: maar ${Math.round(rpeShare*100)}% van je sets heeft een RPE genoteerd — "harde sets" is dan onvolledig.</p>`:'')
+    : '<p class="empty">Geen sets in deze weergave.</p>';
 
-  // verdeling donut (periode)
-  const tot=new Map();
-  R.forEach(r=>{ if(r.muscle==='Cardio')return; tot.set(r.muscle,(tot.get(r.muscle)||0)+1); });
-  const entries=[...tot.entries()].sort((a,b)=>b[1]-a[1]);
+  // ---- verdeling donut (gewogen) ----
+  const entries=[...totals.entries()].filter(([m])=>m!=='Cardio'&&m!=='Overig').sort((a,b)=>b[1]-a[1]);
   makeChart('chMuscleShare',{type:'doughnut',
-    data:{labels:entries.map(e=>e[0]),datasets:[{data:entries.map(e=>e[1]),backgroundColor:entries.map(e=>MUSCLE_COLORS[e[0]]||'#4A5160'),borderColor:'#1C1F26',borderWidth:2}]},
+    data:{labels:entries.map(e=>e[0]),datasets:[{data:entries.map(e=>Math.round(e[1])),backgroundColor:entries.map(e=>MUSCLE_COLORS[e[0]]||'#4A5160'),borderColor:'#1C1F26',borderWidth:2}]},
     options:{maintainAspectRatio:false,cutout:'55%',plugins:{legend:{position:'right',labels:{boxWidth:12,font:{family:"'Archivo'",size:11.5}}}}}});
 
   // push/pull (schouders meegerekend: voorkant = push, achterkant = pull)
@@ -686,8 +847,10 @@ function renderSuggesties(){
     if(t!=='weight'&&t!=='reps') return;
     const dates=[...new Set(sets.map(r=>r.date.getTime()))].sort((a,b)=>a-b);
     if(dates.length<3) return;
-    const lastT=dates[dates.length-1];
-    const last=sets.filter(r=>r.date.getTime()===lastT);
+    // baseer op de laatste ~3 weken (beste prestatie), niet op één (mogelijk slechte) sessie
+    const rc=new Date(maxDate); rc.setDate(rc.getDate()-21);
+    const recentSrc = sets.filter(r=>r.date>=rc);
+    const src = recentSrc.length ? recentSrc : sets.filter(r=>r.date.getTime()===dates[dates.length-1]);
     const isCompound=/(bench|squat|deadlift|\brow\b|press|pull[- ]?up|pulldown|rdl|romanian|hip thrust|lunge|\bdip\b)/i.test(name);
 
     // plateau o.b.v. score van het meettype
@@ -699,23 +862,23 @@ function renderSuggesties(){
     let metaStr, targetStr, advice, platesStr='';
     if(t==='weight'){
       let top=0,reps=0;
-      last.forEach(r=>{ if(r.weight_kg>0&&(r.weight_kg>top||(r.weight_kg===top&&r.reps>reps))){top=r.weight_kg;reps=r.reps;} });
+      src.forEach(r=>{ if(r.weight_kg>0&&(r.weight_kg>top||(r.weight_kg===top&&r.reps>reps))){top=r.weight_kg;reps=r.reps;} });
       if(!top) return;
       const repCap=isCompound?8:12;
       const inc=top>=40?2.5:(top>=15?1:0.5);
       let tw=top,tr=reps;
       if(reps>=repCap){ tw=Math.round((top+inc)*2)/2; tr=Math.max(isCompound?5:8,reps-2); advice='Rep-doel gehaald → gewicht omhoog.'; }
       else { tr=reps+1; advice='Zelfde gewicht, mik op +1 rep per set.'; }
-      metaStr=`Laatste sessie: ${top} kg × ${reps} · ${dates.length} sessies in 60 dagen`;
+      metaStr=`Recent beste (21 dgn): ${top} kg × ${reps} · ${dates.length} sessies in 60 dagen`;
       targetStr=`${tw} kg × ${tr}`;
       if(/barbell/i.test(name)&&!/smith/i.test(name)) platesStr=plateHtml(tw);
     } else {  // lichaamsgewicht / reps
-      let reps=0; last.forEach(r=>{ if(r.reps>reps)reps=r.reps; });
+      let reps=0; src.forEach(r=>{ if(r.reps>reps)reps=r.reps; });
       if(!reps) return;
       const repCap=isCompound?15:20;
       if(reps>=repCap){ advice='Sterk! Voeg externe weerstand toe (bijv. +2,5 kg) en bouw reps weer op.'; targetStr=`${name} + gewicht`; }
-      else { advice='+1 rep per set t.o.v. vorige keer.'; targetStr=`${reps+1} reps`; }
-      metaStr=`Laatste sessie: ${reps} reps (lichaamsgewicht) · ${dates.length} sessies in 60 dagen`;
+      else { advice='+1 rep per set t.o.v. je beste recente set.'; targetStr=`${reps+1} reps`; }
+      metaStr=`Recent beste (21 dgn): ${reps} reps (lichaamsgewicht) · ${dates.length} sessies in 60 dagen`;
     }
     cards.push({name,n:sets.length,html:`
       <div class="sugg">
@@ -741,13 +904,16 @@ function renderBenchmark(){
   if(!raw.length)return;
   const bw=parseFloat(document.getElementById('bwInput').value)||80;
   const sex=document.getElementById('sexInput').value;
+  const age=parseFloat(document.getElementById('ageInput').value)||30;
   const finds={'Bench Press':/bench press \(barbell\)/i,'Squat':/^squat \(barbell\)/i,'Deadlift':/^deadlift \(barbell\)/i};
   const grid=document.getElementById('benchGrid'); grid.innerHTML='';
+  let totalE1=0, found=0;
   Object.entries(finds).forEach(([lift,rx])=>{
     let best=0;
     raw.forEach(r=>{ if(rx.test(r.exercise_title)&&isWork(r)&&r.weight_kg>0&&r.reps>0) best=Math.max(best,e1rm(r.weight_kg,r.reps)); });
     const card=document.createElement('div'); card.className='benchcard';
     if(!best){ card.innerHTML=`<div class="lift">${lift}</div><div class="val" style="color:var(--muted)">–</div><div class="cls">Geen data gevonden</div>`; grid.appendChild(card); return; }
+    totalE1+=best; found++;
     const ratio=best/bw, th=STD[sex][lift];
     let ci=0; th.forEach(t=>{ if(ratio>=t)ci++; });
     const next=ci<th.length?th[ci]:null;
@@ -759,6 +925,21 @@ function renderBenchmark(){
       <div class="meter"><i style="width:${pct}%"></i></div>`;
     grid.appendChild(card);
   });
+  // C11/C12 — DOTS (lichaamsgewicht-eerlijk) + ruwe leeftijdscorrectie
+  const box=document.getElementById('dotsBox');
+  if(found===3){
+    const dots=totalE1*dotsCoef(bw,sex);
+    const band = dots<200?'Beginner':dots<300?'Gemiddeld':dots<380?'Gevorderd':dots<460?'Vergevorderd':'Elite';
+    const ageMult = age>=40 ? 1 + (age-40)*0.01 : 1;   // ruwe masters-benadering (~1%/jaar na 40)
+    const ageLine = age>=40 ? ` · leeftijdsgecorrigeerd ≈ <b>${Math.round(dots*ageMult)}</b> <span style="color:var(--muted)">(benadering)</span>` : '';
+    box.innerHTML = `<div class="dotsc">
+      <div class="lab">DOTS-score — lichaamsgewicht-eerlijk · totaal ${Math.round(totalE1)} kg @ ${Math.round(bw)} kg</div>
+      <div class="val">${Math.round(dots)} <span style="font-size:14px;color:var(--muted)">· ${band}</span>${ageLine}</div>
+      <div class="lab" style="margin-top:6px">DOTS corrigeert voor lichaamsgewicht (verving Wilks in 2019) en vergelijkt daardoor eerlijker tussen gewichtsklassen dan de kg/kg-ratio's hierboven. Banden zijn indicatief.</div>
+    </div>`;
+  } else {
+    box.innerHTML = `<div class="dotsc"><div class="lab">DOTS-score verschijnt zodra je bench, squat én deadlift (barbell) in je data hebt.</div></div>`;
+  }
 }
 
 /* ---------------- TRAININGSPLAN ---------------- */
@@ -841,15 +1022,17 @@ function buildPlan(cfg){
   }
   return {split,days,cfg};
 }
-function planTarget(e, week, level){
+function planTarget(e, week, level, rir){
   // gevorderd: elke 2 weken ophogen (wekelijkse lineaire progressie is alleen realistisch voor beginners)
   const steps = level==='adv' ? Math.floor((week-1)/2) : (week-1);
+  const buffer = (typeof rir==='number' && rir>=0) ? rir : 2;
   if(e.t==='reps' || !e.e1){
     const reps = e.lo + steps;
     return {main:`${e.sets} × ${reps}`, sub: e.t==='reps'?'lichaamsgewicht':''};
   }
   const inc = e.kind==='comp' ? 2.5 : 1.25;
-  let w = Math.round((e.e1/(1+e.lo/30)*0.88)/2.5)*2.5 + steps*inc;   // 0,88 = heuristische top-set buffer (~2–3 RIR)
+  // C8 — werkgewicht via RIR i.p.v. vaste 0,88: het gewicht waarbij (lo + RIR) reps zou lukken → laat 'rir' reps in reserve
+  let w = Math.round((e.e1/(1+(e.lo+buffer)/30))/2.5)*2.5 + steps*inc;
   w = Math.round(w/1.25)*1.25;
   return {main:`${e.sets} × ${e.lo}–${e.hi}`, sub:`≈ ${w.toLocaleString('nl-NL')} kg`};
 }
@@ -867,7 +1050,7 @@ function renderPlan(){
   const cards=plan.days.map((d,i)=>{
     const groups=[...new Set(d.exs.map(e=>muscleOf(e.name)))].join(' · ');
     const rows=d.exs.map(e=>{
-      const tg=planTarget(e,planWeek,plan.cfg.level);
+      const tg=planTarget(e,planWeek,plan.cfg.level,plan.cfg.rir);
       return `<div class="exrow"><div><span class="nm">${e.name}</span><span class="grp">${muscleOf(e.name)} · ${e.kind==='comp'?'compound':'isolatie'}</span></div>`+
              `<div class="scheme"><b>${tg.main}</b>${tg.sub?`<small>${tg.sub}</small>`:''}</div></div>`;
     }).join('');
@@ -876,7 +1059,7 @@ function renderPlan(){
   out.innerHTML=`
     <div class="card">
       <h3>${plan.cfg.weeks}-weken plan · ${SPLIT_LABEL[plan.split]||plan.split}</h3>
-      <p class="sub">${plan.cfg.days} dagen/week · ${goalLabel} · ${plan.cfg.level==='adv'?'gevorderd — om de week zwaarder':'beginner — wekelijks zwaarder'} · richtgewichten ≈ heuristisch (jouw 1RM)</p>
+      <p class="sub">${plan.cfg.days} dagen/week · ${goalLabel} · ${plan.cfg.level==='adv'?'gevorderd — om de week zwaarder':'beginner — wekelijks zwaarder'} · richtgewichten op ~${plan.cfg.rir} reps in reserve (jouw 1RM)</p>
       <div class="chips plan-weeks">${weeks}</div>
       <div class="musc-sum">${msum}</div>
     </div>
@@ -893,6 +1076,7 @@ function genPlan(){
     split:document.getElementById('planSplit').value,
     goal:document.getElementById('planGoal').value,
     level:document.getElementById('planLevel').value,
+    rir:+document.getElementById('planRIR').value,
     weeks:+document.getElementById('planWeeks').value
   });
   planWeek=1; renderPlan();

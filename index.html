@@ -20,7 +20,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Archivo+Black&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=4">
+<link rel="stylesheet" href="styles.css?v=6">
 </head>
 <body>
 <div class="wrap">
@@ -33,9 +33,11 @@
   <div class="headtools">
     <button class="btn ghost sm" id="installBtn" style="display:none">Installeren</button>
     <div class="periods" id="periods" style="display:none">
+      <button data-p="1m">1M</button>
       <button data-p="3m">3M</button>
       <button data-p="6m">6M</button>
       <button data-p="1y">1J</button>
+      <button data-p="2y">2J</button>
       <button data-p="all" class="active">Alles</button>
     </div>
   </div>
@@ -53,14 +55,15 @@
 </div>
 
 <div id="dataBar">
-  <div class="info">
+  <button class="info" id="dataToggle" type="button" aria-expanded="false" title="Klik om te openen/sluiten">
     <div class="ok" aria-hidden="true">✓</div>
     <div class="txt">
       <div class="name" id="dbName">—</div>
       <div class="meta" id="dbMeta">—</div>
     </div>
-  </div>
-  <div class="acts">
+    <span class="chev" aria-hidden="true">▾</span>
+  </button>
+  <div class="acts" id="dataActs" hidden>
     <button class="btn ghost sm" id="newBtn">Nieuw bestand</button>
     <button class="btn ghost sm" id="demoBtn2">Voorbeelddata</button>
     <button class="btn ghost sm" id="clearBtn">Wissen</button>
@@ -76,7 +79,6 @@
   <button data-tab="spieren">Spiergroepen</button>
   <button data-tab="suggesties">Suggesties</button>
   <button data-tab="plan">Plan</button>
-  <button data-tab="wetenschap">Wetenschap</button>
 </nav>
 
 <!-- ================= OVERZICHT ================= -->
@@ -136,7 +138,7 @@
 <section class="tab" id="tab-progressie">
   <div class="card">
     <h3>Oefening kiezen</h3>
-    <p class="sub">Typ een naam of klik op een van je meest getrainde oefeningen</p>
+    <p class="sub">Typ een naam of klik op een van je laatst gebruikte oefeningen</p>
     <input list="exList" id="exInput" placeholder="Bijv. Bench Press (Barbell)…" autocomplete="off">
     <datalist id="exList"></datalist>
     <div class="chips" id="exChips"></div>
@@ -203,17 +205,26 @@
 
 <!-- ================= SPIERGROEPEN ================= -->
 <section class="tab" id="tab-spieren">
+  <div class="chips" id="muscleModeChips" style="margin-bottom:2px">
+    <button class="chip active" data-mode="all">Alle werksets</button>
+    <button class="chip" data-mode="hard">Harde sets (RPE ≥ 7)</button>
+  </div>
   <div class="grid2">
     <div class="card">
-      <h3>Werksets per spiergroep per week</h3>
-      <p class="sub">Laatste 8 weken · richtlijn ~10–20 sets/spiergroep/week (ondergrens goed onderbouwd; boven ~15–20 is het bewijs zwakker, en het geldt voor sets dicht bij falen)</p>
-      <div class="chartbox tall"><canvas id="chMuscleWeek"></canvas></div>
+      <h3>Getrainde spieren</h3>
+      <p class="sub">Volume per spiergroep in de gekozen periode — <b>licht</b> = weinig, <b>donkerblauw</b> = veel getraind. Secundaire spieren tellen half mee.</p>
+      <div id="bodyHeat" class="body-wrap"></div>
     </div>
     <div class="card">
       <h3>Verdeling over de periode</h3>
-      <p class="sub">Aandeel werksets per spiergroep</p>
+      <p class="sub">Aandeel werksets per spiergroep (gewogen)</p>
       <div class="chartbox tall"><canvas id="chMuscleShare"></canvas></div>
     </div>
+  </div>
+  <div class="card">
+    <h3>Werksets per spiergroep per week</h3>
+    <p class="sub">Laatste 8 weken · richtlijn ~10–20 sets/spiergroep/week (ondergrens goed onderbouwd; boven ~15–20 is het bewijs zwakker, en het geldt voor sets dicht bij falen)</p>
+    <div class="scrollt" id="muscleWeekGrid"></div>
   </div>
   <div class="card">
     <h3>Push / Pull-balans</h3>
@@ -233,11 +244,13 @@
   <div class="card" id="bench">
     <h3>Krachtbenchmark</h3>
     <p class="sub">Je geschatte 1RM afgezet tegen je lichaamsgewicht (algemene krachtstandaarden)</p>
-    <div class="formrow" style="max-width:420px">
+    <div class="formrow" style="max-width:560px">
       <div><label class="lbl" for="bwInput">Lichaamsgewicht (kg)</label><input type="number" id="bwInput" value="80" min="30" max="250"></div>
+      <div><label class="lbl" for="ageInput">Leeftijd</label><input type="number" id="ageInput" value="30" min="14" max="90"></div>
       <div><label class="lbl" for="sexInput">Geslacht</label><select id="sexInput"><option value="m">Man</option><option value="f">Vrouw</option></select></div>
     </div>
     <div class="benchgrid" id="benchGrid"></div>
+    <div id="dotsBox"></div>
     <p class="sub" style="margin:14px 0 0">Standaarden komen uit zelf-gerapporteerde data van trainings-apps (StrengthLevel/ExRx-achtig), niet uit een representatieve steekproef, en gelden voor jong-volwassenen. Ze negeren bovendien lichaamsgewicht-schaling (zwaardere lifters benadeeld; vgl. Wilks/DOTS) en leeftijd. Zie Wetenschap.</p>
   </div>
 </section>
@@ -262,6 +275,8 @@
         <select id="planGoal"><option value="hyp" selected>Spiergroei</option><option value="str">Kracht</option></select></div>
       <div><label class="lbl" for="planLevel">Niveau</label>
         <select id="planLevel"><option value="nov" selected>Beginner</option><option value="adv">Gevorderd</option></select></div>
+      <div><label class="lbl" for="planRIR">Reps in reserve</label>
+        <select id="planRIR"><option value="1">1 (zwaar)</option><option value="2" selected>2</option><option value="3">3</option><option value="4">4 (licht)</option></select></div>
       <div><label class="lbl" for="planWeeks">Aantal weken</label>
         <select id="planWeeks"><option>4</option><option selected>6</option><option>8</option><option>12</option></select></div>
     </div>
@@ -270,8 +285,9 @@
   <div id="planOut"></div>
 </section>
 
-<!-- ================= WETENSCHAP ================= -->
-<section class="tab" id="tab-wetenschap">
+<!-- ================= WETENSCHAP (onderaan, inklapbaar) ================= -->
+<div style="text-align:center;margin:26px 0 2px"><button class="btn ghost sm" id="sciToggle" type="button">🔬 Wetenschappelijke onderbouwing</button></div>
+<section id="tab-wetenschap" hidden>
   <div class="card">
     <h3>Wetenschap &amp; methode</h3>
     <p class="sub">Elke formule en vuistregel in de app is onafhankelijk tegen de literatuur getoetst (audit C1–C16, met citaat-verificatie). Hieronder: wat de app doet, hoe sterk het bewijs is, en de belangrijkste kanttekening. Bewijsniveau: <b>A</b> = meta-analyse · <b>B</b> = RCT('s) · <b>C</b> = observationeel/mechanistisch · <b>D</b> = conventie/norm.</p>
@@ -281,7 +297,11 @@
       <li><b>Plateau &amp; trend</b> nu via een ruis-robuuste regressie over ~6 weken, i.p.v. een 0,2%-drempel die onder de meetruis (~4%) lag en valse plateaus gaf.</li>
       <li><b>Plan → Niveau</b> (Beginner/Gevorderd): beginners hogen wekelijks op, gevorderden om de week — wekelijkse lineaire progressie is alleen realistisch voor beginners. Richtgewichten zijn expliciet een <i>startpunt</i>.</li>
       <li><b>e1RM uit &gt;12 reps</b> wordt gemarkeerd met een <span style="color:var(--plate-yellow)">*</span> (minder betrouwbaar).</li>
-      <li><b>Rep-bereik, zones, push/pull-balans, benchmark en volume</b> zijn herkaderd met de nuances hieronder.</li>
+      <li><b>Krachtbenchmark → DOTS</b> (lichaamsgewicht-eerlijk, verving Wilks) + een leeftijdsveld met ruwe masters-correctie (C11/C12).</li>
+      <li><b>Werkgewicht in het plan via "reps in reserve" (RIR)</b> in plaats van de vaste 0,88-buffer (C8).</li>
+      <li><b>"Harde sets" (RPE ≥ 7)</b> als aparte weergave-modus bij Spiergroepen (C5/C13).</li>
+      <li><b>Secundaire spieren</b> tellen half mee (bijv. dips = borst + triceps) (C16), met een nieuwe <b>lichaam-heatmap</b> en een overzichtelijker weekraster.</li>
+      <li><b>Rep-bereik, zones, push/pull-balans en volume</b> zijn herkaderd met de nuances hieronder.</li>
     </ul>
 
     <h4>Claims &amp; bewijs</h4>
@@ -336,6 +356,6 @@
 
 <script src="vendor/papaparse.min.js"></script>
 <script src="vendor/chart.umd.min.js"></script>
-<script src="app.js?v=4"></script>
+<script src="app.js?v=6"></script>
 </body>
 </html>
