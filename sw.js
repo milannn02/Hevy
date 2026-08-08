@@ -1,10 +1,10 @@
 /* Trainingslogboek service worker — offline-first app-shell (stale-while-revalidate) */
-const CACHE = 'hevylog-v9';
+const CACHE = 'hevylog-v10';
 const ASSETS = [
   './',
   'index.html',
-  'styles.css?v=8',
-  'app.js?v=8',
+  'styles.css?v=10',
+  'app.js?v=10',
   'manifest.webmanifest',
   'vendor/papaparse.min.js',
   'vendor/chart.umd.min.js',
